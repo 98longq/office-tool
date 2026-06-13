@@ -1,6 +1,5 @@
-"""Future Excel tools live here.
+"""Excel helper tools."""
 
-The project keeps spreadsheet utilities separate from the official-document
-engine so each tool can grow without coupling UI, audit rules, and workbook
-logic together.
-"""
+from .tools import WorkbookSummary, clean_workbook, inspect_workbook
+
+__all__ = ["WorkbookSummary", "clean_workbook", "inspect_workbook"]
