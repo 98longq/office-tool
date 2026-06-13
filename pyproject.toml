@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "office-tool"
+version = "0.1.0"
+description = "Office assistant focused on Chinese official document audit and formatting."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "python-docx>=1.1.0",
+  "openpyxl>=3.1.0",
+]
+
+[project.scripts]
+office-tool = "office_tool.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
