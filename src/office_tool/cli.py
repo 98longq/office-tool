@@ -11,13 +11,7 @@ from typing import Any
 from . import __version__
 from .config import OfficeToolConfig
 from .excel import clean_workbook, inspect_workbook
-from .services import (
-    audit_document_path,
-    audit_many,
-    format_document_path,
-    format_many,
-    summarize_results,
-)
+from .services import audit_document_path, audit_many, format_document_path, format_many, summarize_results
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -27,78 +21,81 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return args.func(args)
     except Exception as exc:
-        print(f"错误：{exc}", file=sys.stderr)
+        print(f"Error: {exc}", file=sys.stderr)
         return 1
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="OfficeTool 公文审计、格式处理和 Excel 小工具")
+    parser = argparse.ArgumentParser(description="OfficeTool document audit, formatting, and Excel helpers.")
     parser.add_argument("--version", action="version", version=f"office-tool {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    audit = subparsers.add_parser("audit", help="审计单个文档")
-    audit.add_argument("input", help="输入 .docx/.txt/.md")
+    audit = subparsers.add_parser("audit", help="Audit one .docx/.txt/.md file.")
+    audit.add_argument("input", help="Input .docx/.txt/.md file.")
     add_config_args(audit)
-    audit.add_argument("--json", dest="json_report", help="写出 JSON 审计报告")
-    audit.add_argument("--markdown", dest="markdown_report", help="写出 Markdown 审计报告")
+    audit.add_argument("--json", dest="json_report", help="Write JSON audit report.")
+    audit.add_argument("--markdown", dest="markdown_report", help="Write Markdown audit report.")
     audit.set_defaults(func=cmd_audit)
 
-    batch_audit = subparsers.add_parser("batch-audit", help="批量审计文件或目录")
-    batch_audit.add_argument("inputs", nargs="+", help="输入文件或目录")
+    batch_audit = subparsers.add_parser("batch-audit", help="Audit files or folders.")
+    batch_audit.add_argument("inputs", nargs="+", help="Input files or folders.")
     add_config_args(batch_audit)
-    batch_audit.add_argument("-r", "--report-dir", required=True, help="报告输出目录")
-    batch_audit.add_argument("--markdown", action="store_true", help="同时输出 Markdown 报告")
+    batch_audit.add_argument("-r", "--report-dir", required=True, help="Report output folder.")
+    batch_audit.add_argument("--markdown", action="store_true", help="Also write Markdown reports.")
     batch_audit.set_defaults(func=cmd_batch_audit)
 
-    fmt = subparsers.add_parser("format", help="审计并生成格式化后的 .docx")
-    fmt.add_argument("input", help="输入 .docx/.txt/.md")
-    fmt.add_argument("-o", "--output", required=True, help="输出 .docx")
+    fmt = subparsers.add_parser("format", help="Audit and generate a formatted .docx file.")
+    fmt.add_argument("input", help="Input .docx/.txt/.md file.")
+    fmt.add_argument("-o", "--output", required=True, help="Output .docx file.")
     add_config_args(fmt)
-    fmt.add_argument("--audit-json", help="写出 JSON 审计报告")
-    fmt.add_argument("--audit-markdown", help="写出 Markdown 审计报告")
+    fmt.add_argument("--audit-json", help="Write JSON audit report.")
+    fmt.add_argument("--audit-markdown", help="Write Markdown audit report.")
     fmt.set_defaults(func=cmd_format)
 
-    batch_format = subparsers.add_parser("batch-format", help="批量格式化文件或目录")
-    batch_format.add_argument("inputs", nargs="+", help="输入文件或目录")
-    batch_format.add_argument("-o", "--output", required=True, help="输出目录")
+    batch_format = subparsers.add_parser("batch-format", help="Format files or folders.")
+    batch_format.add_argument("inputs", nargs="+", help="Input files or folders.")
+    batch_format.add_argument("-o", "--output", required=True, help="Output folder.")
     add_config_args(batch_format)
-    batch_format.add_argument("-r", "--report-dir", help="报告输出目录")
-    batch_format.add_argument("--markdown", action="store_true", help="同时输出 Markdown 报告")
+    batch_format.add_argument("-r", "--report-dir", help="Report output folder.")
+    batch_format.add_argument("--markdown", action="store_true", help="Also write Markdown reports.")
     batch_format.set_defaults(func=cmd_batch_format)
 
-    excel = subparsers.add_parser("excel", help="Excel 小工具")
+    excel = subparsers.add_parser("excel", help="Excel helper tools.")
     excel_sub = excel.add_subparsers(dest="excel_command", required=True)
 
-    excel_inspect = excel_sub.add_parser("inspect", help="检查工作簿概况")
-    excel_inspect.add_argument("input", help="输入 .xlsx")
-    excel_inspect.add_argument("--json", dest="json_report", help="写出 JSON 报告")
+    excel_inspect = excel_sub.add_parser("inspect", help="Inspect workbook summary.")
+    excel_inspect.add_argument("input", help="Input .xlsx file.")
+    excel_inspect.add_argument("--json", dest="json_report", help="Write JSON report.")
     excel_inspect.set_defaults(func=cmd_excel_inspect)
 
-    excel_clean = excel_sub.add_parser("clean", help="清洗工作簿文本空白和空行")
-    excel_clean.add_argument("input", help="输入 .xlsx")
-    excel_clean.add_argument("-o", "--output", required=True, help="输出 .xlsx")
-    excel_clean.add_argument("--keep-empty-rows", action="store_true", help="保留空行")
+    excel_clean = excel_sub.add_parser("clean", help="Trim text and remove empty rows.")
+    excel_clean.add_argument("input", help="Input .xlsx file.")
+    excel_clean.add_argument("-o", "--output", required=True, help="Output .xlsx file.")
+    excel_clean.add_argument("--keep-empty-rows", action="store_true", help="Keep empty rows.")
     excel_clean.set_defaults(func=cmd_excel_clean)
 
-    show = subparsers.add_parser("show-config", help="显示默认配置")
+    show = subparsers.add_parser("show-config", help="Print default config.")
     show.set_defaults(func=cmd_show_config)
 
-    init = subparsers.add_parser("init-config", help="生成默认配置 JSON")
-    init.add_argument("-o", "--output", default="office_tool_config.json", help="输出配置文件路径")
+    init = subparsers.add_parser("init-config", help="Write default config JSON.")
+    init.add_argument("-o", "--output", default="office_tool_config.json", help="Output config path.")
     init.set_defaults(func=cmd_init_config)
 
-    gui = subparsers.add_parser("gui", help="启动桌面界面")
+    gui = subparsers.add_parser("gui", help="Start desktop GUI.")
     gui.set_defaults(func=cmd_gui)
     return parser
 
 
 def add_config_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--config", help="JSON 配置文件")
-    parser.add_argument("--set", action="append", default=[], help="覆盖配置，格式 path=value，例如 page.margin_top_cm=3.7")
-    parser.add_argument("--ai-review", action="store_true", help="启用 DeepSeek 公文文本 AI 审查")
-    parser.add_argument("--ai-base-url", help="内网 DeepSeek OpenAI-compatible base URL，例如 http://host:8000/v1")
-    parser.add_argument("--ai-model", help="DeepSeek 模型名，默认 deepseek-chat")
-    parser.add_argument("--ai-api-key-env", help="读取 API Key 的环境变量名，默认 DEEPSEEK_API_KEY")
+    parser.add_argument("--config", help="JSON config file.")
+    parser.add_argument("--set", action="append", default=[], help="Override config path=value, e.g. page.margin_top_cm=3.7")
+    parser.add_argument("--ai-review", action="store_true", help="Enable DeepSeek text review.")
+    parser.add_argument("--ai-base-url", help="DeepSeek base URL or full /chat/completions URL.")
+    parser.add_argument("--ai-model", help="DeepSeek model name, e.g. DeepSeek-R1.")
+    parser.add_argument("--ai-api-key", help="Authorization token. Prefer env vars for shared machines.")
+    parser.add_argument("--ai-api-key-env", help="Environment variable for API key, default DEEPSEEK_API_KEY.")
+    parser.add_argument("--ai-auth-prefix", help="Authorization prefix. Use empty string for raw token.")
+    parser.add_argument("--ai-stream", action="store_true", help="Parse line-delimited streaming response.")
 
 
 def cmd_audit(args: argparse.Namespace) -> int:
@@ -183,12 +180,12 @@ def cmd_gui(_args: argparse.Namespace) -> int:
 
 def print_result(result) -> None:
     if result.error:
-        print(f"[失败] {result.source}: {result.error}", file=sys.stderr)
+        print(f"[failed] {result.source}: {result.error}", file=sys.stderr)
         return
     if result.report:
         print(f"{result.source}: {result.report.summary()}")
         for finding in result.report.findings:
-            block = "" if finding.block_index is None else f"第 {finding.block_index + 1} 段 "
+            block = "" if finding.block_index is None else f"block {finding.block_index + 1} "
             print(f"  [{finding.severity}] {block}{finding.message}")
 
 
@@ -199,7 +196,7 @@ def load_config_from_args(args: argparse.Namespace) -> OfficeToolConfig:
     config = OfficeToolConfig.from_dict(raw)
     for item in getattr(args, "set", []) or []:
         if "=" not in item:
-            raise ValueError(f"--set 必须是 path=value：{item}")
+            raise ValueError(f"--set must be path=value: {item}")
         path, raw_value = item.split("=", 1)
         config.set_path(path.strip(), parse_value(raw_value))
     if getattr(args, "ai_review", False):
@@ -209,8 +206,14 @@ def load_config_from_args(args: argparse.Namespace) -> OfficeToolConfig:
         config.ai_review.enabled = True
     if getattr(args, "ai_model", None):
         config.ai_review.model = args.ai_model
+    if getattr(args, "ai_api_key", None):
+        config.ai_review.api_key = args.ai_api_key
     if getattr(args, "ai_api_key_env", None):
         config.ai_review.api_key_env = args.ai_api_key_env
+    if getattr(args, "ai_auth_prefix", None) is not None:
+        config.ai_review.auth_prefix = args.ai_auth_prefix
+    if getattr(args, "ai_stream", False):
+        config.ai_review.stream = True
     return config
 
 

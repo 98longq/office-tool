@@ -66,6 +66,9 @@ class AIReviewOptions:
     model: str = "deepseek-chat"
     api_key: str = ""
     api_key_env: str = "DEEPSEEK_API_KEY"
+    auth_prefix: str = "Bearer"
+    stream: bool = False
+    strip_reasoning: bool = True
     timeout_seconds: int = 120
     temperature: float = 0.1
     max_tokens: int = 2048
@@ -74,22 +77,22 @@ class AIReviewOptions:
 
 def _default_styles() -> dict[str, StyleSpec]:
     return {
-        "red_head": StyleSpec("方正小标宋简体", 32, "center", color="FF0000"),
-        "document_number": StyleSpec("仿宋_GB2312", 16, "center"),
-        "signer": StyleSpec("仿宋_GB2312", 16, "right"),
-        "title": StyleSpec("方正小标宋简体", 22, "center", line_spacing_pt=33),
-        "subtitle": StyleSpec("楷体_GB2312", 16, "center", line_spacing_pt=33),
-        "main_send": StyleSpec("仿宋_GB2312", 16, "left", line_spacing_pt=28),
-        "body": StyleSpec("仿宋_GB2312", 16, "justify", first_line_chars=2, line_spacing_pt=28),
-        "h1": StyleSpec("黑体", 16, "justify", first_line_chars=2, line_spacing_pt=28),
-        "h2": StyleSpec("楷体_GB2312", 16, "justify", first_line_chars=2, line_spacing_pt=28),
-        "h3": StyleSpec("仿宋_GB2312", 16, "justify", first_line_chars=2, line_spacing_pt=28),
-        "h4": StyleSpec("仿宋_GB2312", 16, "justify", first_line_chars=2, line_spacing_pt=28),
-        "attachment": StyleSpec("仿宋_GB2312", 16, "left", line_spacing_pt=28),
-        "signatory": StyleSpec("仿宋_GB2312", 16, "right", line_spacing_pt=28),
-        "date": StyleSpec("仿宋_GB2312", 16, "right", line_spacing_pt=28),
-        "copy_to": StyleSpec("仿宋_GB2312", 14, "left", line_spacing_pt=24),
-        "page_number": StyleSpec("宋体", 14, "center"),
+        "red_head": StyleSpec("\u65b9\u6b63\u5c0f\u6807\u5b8b\u7b80\u4f53", 32, "center", color="FF0000"),
+        "document_number": StyleSpec("\u4eff\u5b8b_GB2312", 16, "center"),
+        "signer": StyleSpec("\u4eff\u5b8b_GB2312", 16, "right"),
+        "title": StyleSpec("\u65b9\u6b63\u5c0f\u6807\u5b8b\u7b80\u4f53", 22, "center", line_spacing_pt=33),
+        "subtitle": StyleSpec("\u6977\u4f53_GB2312", 16, "center", line_spacing_pt=33),
+        "main_send": StyleSpec("\u4eff\u5b8b_GB2312", 16, "left", line_spacing_pt=28),
+        "body": StyleSpec("\u4eff\u5b8b_GB2312", 16, "justify", first_line_chars=2, line_spacing_pt=28),
+        "h1": StyleSpec("\u9ed1\u4f53", 16, "justify", first_line_chars=2, line_spacing_pt=28),
+        "h2": StyleSpec("\u6977\u4f53_GB2312", 16, "justify", first_line_chars=2, line_spacing_pt=28),
+        "h3": StyleSpec("\u4eff\u5b8b_GB2312", 16, "justify", first_line_chars=2, line_spacing_pt=28),
+        "h4": StyleSpec("\u4eff\u5b8b_GB2312", 16, "justify", first_line_chars=2, line_spacing_pt=28),
+        "attachment": StyleSpec("\u4eff\u5b8b_GB2312", 16, "left", line_spacing_pt=28),
+        "signatory": StyleSpec("\u4eff\u5b8b_GB2312", 16, "right", line_spacing_pt=28),
+        "date": StyleSpec("\u4eff\u5b8b_GB2312", 16, "right", line_spacing_pt=28),
+        "copy_to": StyleSpec("\u4eff\u5b8b_GB2312", 14, "left", line_spacing_pt=24),
+        "page_number": StyleSpec("\u5b8b\u4f53", 14, "center"),
     }
 
 
@@ -132,7 +135,7 @@ class OfficeToolConfig:
     def set_path(self, path: str, value: Any) -> None:
         parts = path.split(".")
         if not parts:
-            raise ValueError("配置路径不能为空")
+            raise ValueError("\u914d\u7f6e\u8def\u5f84\u4e0d\u80fd\u4e3a\u7a7a")
         target: Any = self
         for part in parts[:-1]:
             if isinstance(target, dict):
