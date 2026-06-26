@@ -94,7 +94,8 @@ class OfficialDocumentContentGenerator:
             structure = self.auditor.detect_structure(self.auditor._paragraph_items(doc.paragraphs))
         if structure.red_head is None:
             anchor = structure.document_number if structure.document_number is not None else 1
-            self._insert_paragraph(doc, max(0, anchor), options.red_head_title.strip())
+            paragraph = self._insert_paragraph(doc, max(0, anchor), options.red_head_title.strip())
+            self._set_paragraph_style_id(paragraph, "OfficeToolGeneratedRedHead")
             changed = True
             structure = self.auditor.detect_structure(self.auditor._paragraph_items(doc.paragraphs))
         if structure.document_number is None:
@@ -108,14 +109,15 @@ class OfficialDocumentContentGenerator:
 
     def _add_letter_red_head(self, doc: DocxDocument, structure, result: GenerationResult) -> None:
         options = self.config.generation
-        self._require_missing_red_head_values(structure, options)
+        self._require_missing_red_head_values(structure, options, require_document_number=False)
         changed = False
         if structure.red_head is None:
             anchor = structure.document_number if structure.document_number is not None else 0
-            self._insert_paragraph(doc, max(0, anchor), options.red_head_title.strip())
+            paragraph = self._insert_paragraph(doc, max(0, anchor), options.red_head_title.strip())
+            self._set_paragraph_style_id(paragraph, "OfficeToolGeneratedRedHead")
             changed = True
             structure = self.auditor.detect_structure(self.auditor._paragraph_items(doc.paragraphs))
-        if structure.document_number is None:
+        if structure.document_number is None and options.document_number.strip():
             anchor = (structure.red_head + 1) if structure.red_head is not None else 1
             self._insert_paragraph(doc, anchor, options.document_number.strip())
             changed = True
@@ -178,11 +180,11 @@ class OfficialDocumentContentGenerator:
             raise ValueError("添加内容前请填写：" + "、".join(missing))
 
     @classmethod
-    def _require_missing_red_head_values(cls, structure, options) -> None:
+    def _require_missing_red_head_values(cls, structure, options, *, require_document_number: bool = True) -> None:
         required: list[tuple[str, str]] = []
         if structure.red_head is None:
             required.append(("红头名称", options.red_head_title))
-        if structure.document_number is None:
+        if require_document_number and structure.document_number is None:
             required.append(("发文字号", options.document_number))
         if required:
             cls._require(*required)

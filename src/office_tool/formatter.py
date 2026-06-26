@@ -131,6 +131,8 @@ class OfficialDocumentFormatter:
         role_by_index = self._roles_from_report(report)
         paragraph_by_index = dict(enumerate(doc.paragraphs))
         date_index = self._first_index_for(role_by_index, "date")
+        if date_index is not None:
+            doc.paragraphs[date_index].text = self._normalize_document_date_text(doc.paragraphs[date_index].text)
         date_text = doc.paragraphs[date_index].text.strip() if date_index is not None else ""
         title_index = self._first_index_for(role_by_index, "title")
         title_block = self._title_block_indices(doc.paragraphs, title_index, role_by_index)
@@ -584,17 +586,12 @@ class OfficialDocumentFormatter:
         spacing.set(qn("w:val"), str(int(round(spacing_pt * 20))))
 
     def _apply_date_layout(self, paragraph: Paragraph) -> None:
+        paragraph.text = self._normalize_document_date_text(paragraph.text)
         paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
         set_side_indent_chars(paragraph, right_chars=4, size_pt=self.config.styles["date"].size_pt)
 
     def _apply_signatory_layout(self, paragraph: Paragraph, date_text: str) -> None:
         paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        signatory_chars = self._text_width_chars(paragraph.text)
-        date_chars = self._text_width_chars(date_text)
-        right_chars = max(0.0, 4 + (date_chars - signatory_chars) / 2)
-        space_width_pt = self.config.styles["signatory"].size_pt / 4
-        target_width_pt = right_chars * self.config.page.grid_char_space_pt
-        trailing_spaces = max(1, int(target_width_pt // space_width_pt)) if target_width_pt else 0
         base_text = paragraph.text.rstrip()
         paragraph.text = base_text
         apply_style_to_paragraph(
@@ -602,14 +599,25 @@ class OfficialDocumentFormatter:
             self.config.styles["signatory"],
             preserve_bold_italic=self.config.format.preserve_existing_bold_italic,
         )
+        signatory_chars = self._text_width_chars(base_text)
+        target_chars = 14.0
+        missing_chars = max(0.0, target_chars - signatory_chars)
+        trailing_spaces = int(round(missing_chars * 2))
         if trailing_spaces:
-            spacer_run = paragraph.add_run(" " * (trailing_spaces - 1) + "\u00a0")
+            spacer_run = paragraph.add_run(" " * max(0, trailing_spaces - 1) + "\u00a0")
             style = self.config.styles["signatory"]
             apply_font(spacer_run, style.font, style.size_pt, style.color, latin_font=style.latin_font)
-            residual_pt = target_width_pt - trailing_spaces * space_width_pt
-            self._set_run_spacing(spacer_run, residual_pt / trailing_spaces)
         paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
         set_side_indent_chars(paragraph, size_pt=self.config.styles["signatory"].size_pt)
+
+    @staticmethod
+    def _normalize_document_date_text(text: str) -> str:
+        stripped = text.strip()
+        match = re.fullmatch(r"(\d{4})年\s*(\d{1,2})月\s*(\d{1,2})日", stripped)
+        if not match:
+            return stripped
+        year, month, day = match.groups()
+        return f"{year}年{int(month):02d}月{int(day):02d}日"
 
     @staticmethod
     def _apply_normal_style(doc: DocxDocument, font_name: str, size_pt: float, latin_font: str) -> None:

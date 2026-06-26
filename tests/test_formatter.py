@@ -172,6 +172,29 @@ class FormatterTests(unittest.TestCase):
         self.assertEqual(report.stats["generated_content"], ["red_head"])
         self.assertFalse(any(finding.code.startswith("letter_") for finding in report.findings))
 
+    def test_export_generates_letter_header_without_document_number(self):
+        doc = Document()
+        doc.add_paragraph("关于商请协助办理事项的函")
+        doc.add_paragraph("有关单位：")
+        doc.add_paragraph("请协助办理。")
+        config = OfficeToolConfig()
+        config.audit.profile = "letter_head"
+        config.generation.add_red_head = True
+        config.generation.red_head_title = "某某集团有限公司"
+
+        report = OfficialDocumentFormatter(config).format_document(doc)
+        texts = [paragraph.text.strip() for paragraph in doc.paragraphs]
+        text_box = next(
+            (shape for shape in doc._element.body.iter("{urn:schemas-microsoft-com:vml}shape") if shape.get("id") == "OfficeToolLetterHeadTextBox"),
+            None,
+        )
+
+        self.assertIsNotNone(text_box)
+        self.assertEqual("".join(node.text or "" for node in text_box.iter(qn("w:t"))), "某某集团有限公司")
+        self.assertFalse(any("〔2026〕" in text or text.endswith("号") for text in texts))
+        self.assertNotIn("missing_document_number", {finding.code for finding in report.findings})
+        self.assertEqual(report.stats["generated_content"], ["red_head"])
+
     def test_distribution_moves_to_even_page_for_standard_document(self):
         with tempfile.TemporaryDirectory(prefix="office_tool_distribution_") as tmp:
             source = Path(tmp) / "distribution.docx"
@@ -513,7 +536,7 @@ class FormatterTests(unittest.TestCase):
 
             self.assertEqual(body_spacing.get(qn("w:line")), "240")
             self.assertEqual(body_spacing.get(qn("w:lineRule")), "auto")
-            self.assertEqual(texts[:8], ["关于测试的通知", "", "各单位：", "1．正文内容需要单倍行距。", "", "", "办公室", "2026年6月16日"])
+            self.assertEqual(texts[:8], ["关于测试的通知", "", "各单位：", "1．正文内容需要单倍行距。", "", "", "办公室", "2026年06月16日"])
             self.assertEqual(formatted.paragraphs[6].alignment, WD_ALIGN_PARAGRAPH.RIGHT)
             self.assertEqual(formatted.paragraphs[7].alignment, WD_ALIGN_PARAGRAPH.RIGHT)
             title_spacing = formatted.paragraphs[0]._p.pPr.spacing
@@ -522,8 +545,6 @@ class FormatterTests(unittest.TestCase):
             self.assertEqual(signatory_spacing.get(qn("w:before")), "0")
             self.assertEqual(_indent_chars(formatted.paragraphs[6], "rightChars"), None)
             self.assertEqual(len(formatted.paragraphs[6].text) - len(formatted.paragraphs[6].text.rstrip()), 22)
-            spacer_spacing = formatted.paragraphs[6].runs[-1]._element.rPr.find(qn("w:spacing"))
-            self.assertIsNotNone(spacer_spacing)
             self.assertEqual(_indent_chars(formatted.paragraphs[7], "rightChars"), 400)
 
     def test_format_centers_long_signatory_against_date(self):
@@ -535,14 +556,14 @@ class FormatterTests(unittest.TestCase):
             doc.add_paragraph("各单位：")
             doc.add_paragraph("正文内容。")
             doc.add_paragraph("某某单位办公室")
-            doc.add_paragraph("2026年6月19日")
+            doc.add_paragraph("2026年3月4日")
             doc.save(source)
 
             OfficialDocumentFormatter().format_path(source, output)
             formatted = Document(output)
             texts = [paragraph.text.rstrip() for paragraph in formatted.paragraphs]
             signatory_index = texts.index("某某单位办公室")
-            date_index = texts.index("2026年6月19日")
+            date_index = texts.index("2026年03月04日")
 
             self.assertEqual(_indent_chars(formatted.paragraphs[signatory_index], "rightChars"), None)
             self.assertEqual(

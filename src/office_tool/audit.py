@@ -112,6 +112,9 @@ class OfficialDocumentAuditor:
 
         for item in scan_items:
             text = item.text
+            if self._paragraph_style_id(item.paragraph) == "OfficeToolGeneratedRedHead":
+                structure.red_head = item.index
+                continue
             if self._paragraph_style_id(item.paragraph) == "OfficeToolGeneratedSimpleImprint":
                 structure.simple_imprint = item.index
                 continue
@@ -386,7 +389,7 @@ class OfficialDocumentAuditor:
                 can_fix=False,
             )
 
-        if report.is_red_head and not report.is_meeting_minutes and structure.document_number is None:
+        if report.is_red_head and not report.is_meeting_minutes and not report.is_letter_head and structure.document_number is None:
             severity = "warning" if self.config.audit.require_document_number_for_red_head else "info"
             report.add_finding(
                 "missing_document_number",
