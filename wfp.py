@@ -1,4 +1,4 @@
-"""Compatibility entry for the old Word Formatter Pro command."""
+"""Run OfficeTool directly from a source checkout."""
 
 from pathlib import Path
 import sys

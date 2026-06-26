@@ -1,22 +1,44 @@
 __pycache__/
 *.py[cod]
 *.pyo
+.DS_Store
+Thumbs.db
+
+# Test, coverage, and generated verification artifacts
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
+tests/artifacts/*
+!tests/artifacts/.gitkeep
+
+# Local environments and packaging output
 .venv/
 venv/
 build/
 dist/
+release/
 *.egg-info/
-.coverage
-htmlcov/
+
+# Local secrets and machine-specific configuration
+.env
+.env.*
+!.env.example
+*.local.json
+office_tool_config.json
+
+# Runtime output
 *.log
 *.tmp
 ~$*
 *.docx.tmp
+output/
+reports/
+
+# Editor and coding-assistant state
 .idea/
 .vscode/
 .vs/
-output/
-reports/
+.claude/
+.agents/

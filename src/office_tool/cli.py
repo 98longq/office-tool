@@ -10,7 +10,6 @@ from typing import Any
 
 from . import __version__
 from .config import OfficeToolConfig
-from .excel import clean_workbook, inspect_workbook
 from .services import audit_document_path, audit_many, format_document_path, format_many, summarize_results
 
 
@@ -26,30 +25,30 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="OfficeTool document audit, formatting, and Excel helpers.")
+    parser = argparse.ArgumentParser(description="OfficeTool document proofreading and formatting tools.")
     parser.add_argument("--version", action="version", version=f"office-tool {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    audit = subparsers.add_parser("audit", help="Audit one .docx/.txt/.md file.")
-    audit.add_argument("input", help="Input .docx/.txt/.md file.")
-    add_config_args(audit)
-    audit.add_argument("--json", dest="json_report", help="Write JSON audit report.")
-    audit.add_argument("--markdown", dest="markdown_report", help="Write Markdown audit report.")
-    audit.set_defaults(func=cmd_audit)
+    proofread = subparsers.add_parser("proofread", help="Proofread one .doc/.docx/.txt/.md file.")
+    proofread.add_argument("input", help="Input .doc/.docx/.txt/.md file.")
+    add_config_args(proofread)
+    proofread.add_argument("--json", dest="json_report", help="Write JSON proofreading report.")
+    proofread.add_argument("--markdown", dest="markdown_report", help="Write Markdown proofreading report.")
+    proofread.set_defaults(func=cmd_proofread)
 
-    batch_audit = subparsers.add_parser("batch-audit", help="Audit files or folders.")
-    batch_audit.add_argument("inputs", nargs="+", help="Input files or folders.")
-    add_config_args(batch_audit)
-    batch_audit.add_argument("-r", "--report-dir", required=True, help="Report output folder.")
-    batch_audit.add_argument("--markdown", action="store_true", help="Also write Markdown reports.")
-    batch_audit.set_defaults(func=cmd_batch_audit)
+    batch_proofread = subparsers.add_parser("batch-proofread", help="Proofread files or folders.")
+    batch_proofread.add_argument("inputs", nargs="+", help="Input files or folders.")
+    add_config_args(batch_proofread)
+    batch_proofread.add_argument("-r", "--report-dir", required=True, help="Report output folder.")
+    batch_proofread.add_argument("--markdown", action="store_true", help="Also write Markdown reports.")
+    batch_proofread.set_defaults(func=cmd_batch_proofread)
 
-    fmt = subparsers.add_parser("format", help="Audit and generate a formatted .docx file.")
-    fmt.add_argument("input", help="Input .docx/.txt/.md file.")
+    fmt = subparsers.add_parser("format", help="Proofread and generate a formatted .docx file.")
+    fmt.add_argument("input", help="Input .doc/.docx/.txt/.md file.")
     fmt.add_argument("-o", "--output", required=True, help="Output .docx file.")
     add_config_args(fmt)
-    fmt.add_argument("--audit-json", help="Write JSON audit report.")
-    fmt.add_argument("--audit-markdown", help="Write Markdown audit report.")
+    fmt.add_argument("--proofreading-json", help="Write JSON proofreading report.")
+    fmt.add_argument("--proofreading-markdown", help="Write Markdown proofreading report.")
     fmt.set_defaults(func=cmd_format)
 
     batch_format = subparsers.add_parser("batch-format", help="Format files or folders.")
@@ -59,20 +58,6 @@ def build_parser() -> argparse.ArgumentParser:
     batch_format.add_argument("-r", "--report-dir", help="Report output folder.")
     batch_format.add_argument("--markdown", action="store_true", help="Also write Markdown reports.")
     batch_format.set_defaults(func=cmd_batch_format)
-
-    excel = subparsers.add_parser("excel", help="Excel helper tools.")
-    excel_sub = excel.add_subparsers(dest="excel_command", required=True)
-
-    excel_inspect = excel_sub.add_parser("inspect", help="Inspect workbook summary.")
-    excel_inspect.add_argument("input", help="Input .xlsx file.")
-    excel_inspect.add_argument("--json", dest="json_report", help="Write JSON report.")
-    excel_inspect.set_defaults(func=cmd_excel_inspect)
-
-    excel_clean = excel_sub.add_parser("clean", help="Trim text and remove empty rows.")
-    excel_clean.add_argument("input", help="Input .xlsx file.")
-    excel_clean.add_argument("-o", "--output", required=True, help="Output .xlsx file.")
-    excel_clean.add_argument("--keep-empty-rows", action="store_true", help="Keep empty rows.")
-    excel_clean.set_defaults(func=cmd_excel_clean)
 
     show = subparsers.add_parser("show-config", help="Print default config.")
     show.set_defaults(func=cmd_show_config)
@@ -98,14 +83,14 @@ def add_config_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--ai-stream", action="store_true", help="Parse line-delimited streaming response.")
 
 
-def cmd_audit(args: argparse.Namespace) -> int:
+def cmd_proofread(args: argparse.Namespace) -> int:
     config = load_config_from_args(args)
     result = audit_document_path(args.input, config, args.json_report, args.markdown_report)
     print_result(result)
     return 1 if not result.ok or (result.report and result.report.count("error")) else 0
 
 
-def cmd_batch_audit(args: argparse.Namespace) -> int:
+def cmd_batch_proofread(args: argparse.Namespace) -> int:
     config = load_config_from_args(args)
     results = audit_many(args.inputs, config, args.report_dir, markdown=args.markdown, log=lambda msg: print(msg, file=sys.stderr))
     for result in results:
@@ -116,7 +101,7 @@ def cmd_batch_audit(args: argparse.Namespace) -> int:
 
 def cmd_format(args: argparse.Namespace) -> int:
     config = load_config_from_args(args)
-    result = format_document_path(args.input, args.output, config, args.audit_json, args.audit_markdown)
+    result = format_document_path(args.input, args.output, config, args.proofreading_json, args.proofreading_markdown)
     print_result(result)
     if result.output:
         print(str(result.output))
@@ -139,24 +124,6 @@ def cmd_batch_format(args: argparse.Namespace) -> int:
             print(str(result.output))
     print(summarize_results(results), file=sys.stderr)
     return 1 if any(not item.ok for item in results) else 0
-
-
-def cmd_excel_inspect(args: argparse.Namespace) -> int:
-    summary = inspect_workbook(args.input)
-    payload = summary.to_dict()
-    if args.json_report:
-        output = Path(args.json_report).expanduser().resolve()
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps(payload, ensure_ascii=False, indent=2))
-    return 0
-
-
-def cmd_excel_clean(args: argparse.Namespace) -> int:
-    summary = clean_workbook(args.input, args.output, remove_empty_rows=not args.keep_empty_rows)
-    print(json.dumps(summary.to_dict(), ensure_ascii=False, indent=2))
-    print(str(Path(args.output).expanduser().resolve()))
-    return 0
 
 
 def cmd_show_config(_args: argparse.Namespace) -> int:

@@ -51,7 +51,7 @@ def collect_document_inputs(paths: Iterable[str | Path], recursive: bool = True)
             continue
         raise FileNotFoundError(f"输入路径不存在: {path}")
     if not inputs:
-        raise FileNotFoundError("未找到可处理的文档。支持 .docx/.txt/.md")
+        raise FileNotFoundError("未找到可处理的文档。支持 .doc/.docx/.txt/.md")
     return inputs
 
 
@@ -66,14 +66,25 @@ def default_output_for(source: Path, output_root: Path | None, multiple: bool) -
 def default_report_for(source: Path, report_dir: Path | None, suffix: str) -> Path | None:
     if report_dir is None:
         return None
-    return report_dir / f"{source.stem}_audit.{suffix}"
+    return report_dir / f"{source.stem}_proofreading.{suffix}"
 
 
 def run_ai_review_if_enabled(config: OfficeToolConfig, doc, report: AuditReport) -> None:
     if not config.ai_review.enabled:
         return
     text = "\n".join(paragraph.text for paragraph in doc.paragraphs if paragraph.text.strip())
-    DeepSeekTextReviewer(config.ai_review).review_into_report(text, report)
+    try:
+        DeepSeekTextReviewer(config.ai_review).review_into_report(text, report)
+    except Exception as exc:
+        report.add_finding(
+            "ai_proofreading_failed",
+            "warning",
+            "AI 校对未完成，确定性校对和文件格式化结果不受影响。",
+            actual=str(exc),
+            suggestion="检查 AI 服务地址、网络和模型配置后重试。",
+            can_fix=False,
+        )
+        report.stats["ai_proofreading_error"] = str(exc)[:300]
 
 
 def audit_document_path(
@@ -140,7 +151,7 @@ def audit_many(
     results: list[DocumentJobResult] = []
     for index, source in enumerate(source_paths, start=1):
         if log:
-            log(f"审计 {index}/{len(source_paths)}: {source.name}")
+            log(f"校对 {index}/{len(source_paths)}: {source.name}")
         result = audit_document_path(
             source,
             config,

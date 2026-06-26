@@ -5,16 +5,36 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "office-tool"
 version = "0.1.0"
-description = "Office assistant focused on Chinese official document audit and formatting."
+description = "Local proofreading and formatting assistant for Chinese official documents."
 readme = "README.md"
 requires-python = ">=3.10"
+license = { file = "LICENSE" }
+keywords = ["office", "docx", "proofreading", "formatting", "chinese-official-document"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: Microsoft :: Windows",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
 dependencies = [
   "python-docx>=1.1.0",
-  "openpyxl>=3.1.0",
+  "pywin32>=306; platform_system == 'Windows'",
 ]
+
+[project.urls]
+Homepage = "https://github.com/98longq/office-tool"
+Repository = "https://github.com/98longq/office-tool.git"
+Mirror = "https://gitee.com/longq98/office-tool"
+Issues = "https://github.com/98longq/office-tool/issues"
 
 [project.scripts]
 office-tool = "office_tool.cli:main"
+
+[project.gui-scripts]
+office-tool-gui = "office_tool.gui:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

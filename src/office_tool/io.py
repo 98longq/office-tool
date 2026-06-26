@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import re
+import tempfile
 from pathlib import Path
 
 from docx import Document
 from docx.document import Document as DocxDocument
 
-SUPPORTED_INPUTS = {".docx", ".txt", ".md"}
+from .legacy_doc import convert_legacy_doc
+
+SUPPORTED_INPUTS = {".doc", ".docx", ".txt", ".md"}
 
 
 class UnsupportedInputError(ValueError):
@@ -18,6 +21,11 @@ class UnsupportedInputError(ValueError):
 def load_document(path: str | Path) -> tuple[DocxDocument, str]:
     source = Path(path).expanduser().resolve()
     suffix = source.suffix.lower()
+    if suffix == ".doc":
+        with tempfile.TemporaryDirectory(prefix="office_tool_legacy_doc_") as tmp:
+            converted = Path(tmp) / f"{source.stem}.docx"
+            convert_legacy_doc(source, converted)
+            return Document(converted), "doc"
     if suffix == ".docx":
         return Document(source), "docx"
     if suffix == ".txt":
@@ -25,7 +33,7 @@ def load_document(path: str | Path) -> tuple[DocxDocument, str]:
     if suffix == ".md":
         return _document_from_text(_clean_markdown(source.read_text(encoding="utf-8"))), "md"
     raise UnsupportedInputError(
-        f"当前版本支持 .docx/.txt/.md，暂不直接处理 {suffix or '无扩展名'}。"
+        f"当前版本支持 .doc/.docx/.txt/.md，暂不处理 {suffix or '无扩展名'}。"
     )
 
 

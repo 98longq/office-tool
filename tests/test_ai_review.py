@@ -28,7 +28,7 @@ class AIReviewTests(unittest.TestCase):
 
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0].severity, "info")
-        self.assertIn("non-JSON", findings[0].message)
+        self.assertIn("标准 JSON", findings[0].message)
 
     def test_streaming_chunks_are_combined(self):
         raw = "\n".join(

@@ -18,7 +18,7 @@ def write_json_report(report: AuditReport, path: str | Path) -> Path:
 def write_markdown_report(report: AuditReport, path: str | Path) -> Path:
     output = Path(path).expanduser().resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
-    lines = [f"# 公文审计报告", "", report.summary(), ""]
+    lines = [f"# 公文校对报告", "", report.summary(), ""]
     lines.extend(["## 识别到的要素", ""])
     if report.elements:
         lines.append("| 要素 | 段落 | 内容 |")

@@ -37,6 +37,8 @@ class AuditFinding:
 class AuditReport:
     profile: str = "standard"
     is_red_head: bool = False
+    is_letter_head: bool = False
+    is_meeting_minutes: bool = False
     elements: list[DocumentElement] = field(default_factory=list)
     findings: list[AuditFinding] = field(default_factory=list)
     stats: dict[str, Any] = field(default_factory=dict)
@@ -75,9 +77,9 @@ class AuditReport:
 
     def summary(self) -> str:
         if not self.findings:
-            return f"审计完成：{self.profile}，未发现问题。"
+            return f"校对完成：{self.profile}，未发现问题。"
         return (
-            f"审计完成：{self.profile}，"
+            f"校对完成：{self.profile}，"
             f"错误 {self.count('error')}，警告 {self.count('warning')}，提示 {self.count('info')}。"
         )
 
@@ -85,6 +87,8 @@ class AuditReport:
         return {
             "profile": self.profile,
             "is_red_head": self.is_red_head,
+            "is_letter_head": self.is_letter_head,
+            "is_meeting_minutes": self.is_meeting_minutes,
             "summary": self.summary(),
             "stats": dict(self.stats),
             "elements": [element.to_dict() for element in self.elements],
@@ -97,6 +101,7 @@ class DetectedStructure:
     copy_number: int | None = None
     secrecy: int | None = None
     urgency: int | None = None
+    internal_notice: int | None = None
     red_head: int | None = None
     document_number: int | None = None
     signer: int | None = None
@@ -108,6 +113,19 @@ class DetectedStructure:
     date: int | None = None
     copy_to: int | None = None
     print_org_date: int | None = None
+    simple_imprint: int | None = None
+    regulation_code: int | None = None
+    regulation_title: int | None = None
+    regulation_chapters: list[int] = field(default_factory=list)
+    regulation_articles: list[int] = field(default_factory=list)
+    letter_contacts: list[int] = field(default_factory=list)
+    is_letter_head: bool = False
+    meeting_number: int | None = None
+    meeting_issue_line: int | None = None
+    meeting_attendees: list[int] = field(default_factory=list)
+    distribution: int | None = None
+    is_meeting_minutes: bool = False
+    _title_text: str = ""
 
     def front_matter_end(self) -> int:
         values = [
@@ -117,6 +135,12 @@ class DetectedStructure:
             self.red_head,
             self.document_number,
             self.signer,
+            self.meeting_number,
+            self.meeting_issue_line,
         ]
+        if self.internal_notice is not None and (
+            self.red_head is None or self.internal_notice < self.red_head
+        ):
+            values.append(self.internal_notice)
         present = [value for value in values if value is not None]
         return max(present) if present else -1

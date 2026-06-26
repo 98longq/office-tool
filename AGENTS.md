@@ -2,126 +2,98 @@
 
 ## 项目定位
 
-OfficeTool 是面向文秘和日常办公场景的本地办公助手。当前核心功能是公文审计与格式处理，优先支持普通党政机关公文和红头文件；Excel 小工具作为独立模块扩展。
+OfficeTool 是面向单位内部使用的本地公文校对与格式整理工具。当前只维护文档主线，正式支持普通公文、普通红头文件、红头文件（函）和红头文件（会议纪要）；普通红头文件可附带制度正文。表格和其他模块在 UI 中仅显示“功能正在开发中”。
 
-## 当前代码结构
+## 目录约定
 
-- `src/office_tool/config.py`：默认配置，包含页面参数、审计选项、格式化选项、AI 选项和段落样式。
-- `src/office_tool/audit.py`：公文结构识别与审计规则，输出 `AuditReport`。
-- `src/office_tool/formatter.py`：基于审计结果执行页面设置、字体字号、标题层级、红头、页码等格式处理。
-- `src/office_tool/services.py`：单文件与批量审计/格式化服务层，GUI 和 CLI 都应优先复用这里。
-- `src/office_tool/io.py`：输入加载，当前支持 `.docx/.txt/.md`。
-- `src/office_tool/reports.py`：JSON/Markdown 审计报告导出。
-- `src/office_tool/ai/deepseek.py`：可选 DeepSeek 文本 AI 审查，使用 OpenAI-compatible chat completions。
-- `src/office_tool/cli.py`：命令行入口。
-- `src/office_tool/gui.py`：Tkinter 本地桌面界面，支持公文批量审计/格式化和基础 Excel 工具。
-- `src/office_tool/excel/tools.py`：Excel 工作簿检查、文本空白清洗、空行清理。
-- `docs/official_document_rules.md`：本次实现采用的公文格式规则摘要。
-- `tests/`：使用 `unittest` 的审计、格式化、配置、批处理、AI 和 Excel 测试。
-- `wfp.py`、`wfp_cli.py`：旧项目兼容入口，转发到新 CLI。
+- `src/office_tool/`：正式实现代码。
+- `src/office_tool/audit.py`：结构识别和确定性规则。
+- `src/office_tool/formatter.py`：DOCX 页面与文字格式处理。
+- `src/office_tool/generator.py`：仅在导出阶段执行的可选红头与版记生成。
+- `src/office_tool/legacy_doc.py`：调用本机 Word/WPS 将旧版 `.doc` 离线转换为临时 `.docx`。
+- `src/office_tool/profile_store.py`：用户自定义配置的本地持久化。
+- `src/office_tool/docx_utils.py`：OOXML 辅助函数。
+- `src/office_tool/services.py`：单文件和批量服务层，GUI/CLI 共用。
+- `src/office_tool/ai/`：可选 AI 文本校对，默认关闭。
+- AI 失败不得阻断确定性格式化和文件保存；本地配置档中的 Key 使用 Windows DPAPI 加密，通用 JSON 配置不得写入 Key。
+- `src/office_tool/gui.py`：Tkinter 桌面端。
+- `tests/`：全部自动化测试代码。
+- `tests/artifacts/`：唯一允许保存测试输出文档、PDF、PNG 的目录；目录内容被 Git 忽略，仅保留 `.gitkeep`。
+- `docs/official_document_rules.md`：当前确定性公文规则摘要。
 
-## 常用命令
+项目根目录不得新增 `build*`、`dist*`、临时虚拟环境、手工测试文档或一次性打包脚本。除非用户明确要求，不执行或准备 EXE 打包。
 
-当前环境可用的 Codex bundled Python：
+公开仓库不得提交 API Key、真实公文、内网地址、个人信息、本机绝对路径、AI 助手本地配置或 Git 作者真实邮箱。发布前同时检查当前文件和 Git 历史；EXE 仅作为 Release/发行版附件发布，不进入源码分支。
+
+## 当前功能边界
+
+保留：
+
+- 普通公文页面、网格、字体、标题层级、附件、页码、落款和日期。
+- `.doc` 输入通过本机 Word 优先、WPS 备用的 COM 链路离线转换，源文件只读打开并禁用宏，最终输出 `.docx`。
+- 标题下单日期或起止日期使用正文仿宋三号居中；附件首段为左缩进 2/悬挂 4.5 字符，后续附件为左缩进 5/悬挂 1.5 字符，均两端对齐。
+- 普通红头的内部资料提示、华文中宋版头、文号、红线和普通正文。
+- 红头文件（函）的首页正文锚定文本框版头、复合红线、函号、首页隐藏页码、内部资料和联系人信息。
+- 红头文件（会议纪要）的专用版头、期号、编发信息、出席人员混排和分送版记。
+- 红头附带制度正文的分页、制度编号、章标题和条文混排。
+- 抄送和印发版记。
+- 红头方案可选生成完整缺失的红头或版记；检测到完整或部分既有结构时不得重复生成或猜测业务字段。
+- 所有红头版记排在偶数页末尾；普通红头抄送留空时生成仅含印发单位和日期的三段式简版版记。
+- 用户自定义配置保存在 `%APPDATA%\OfficeTool\profiles`，可在“自定义配置”附着菜单中直接应用、重命名和删除，并可另存外部 JSON 备份。
+- 可选 AI 文本校对。
+- GUI 文件队列、直接输入文稿、开始校对、校对导出、AI 配置、校对结果和规则格式。
+- GUI 支持直接输入文稿，并通过与文件队列相同的 `format_many` 正式链路执行校对导出。
+
+不保留：
+
+- Excel 检查或清洗实现。
+- 日志功能页。
+- 其他未明确要求的 UI 预设。
+- PyInstaller 配置、历史 EXE、构建缓存和散落测试文档。
+
+## 硬性排版规则
+
+- 普通公文和普通红头文件：A4；上 3.7 cm、下 3.5 cm、左 2.8 cm、右 2.6 cm。
+- 红头文件（函）：A4；上 3.7 cm、下 2.5 cm、左 2.8 cm、右 2.6 cm。
+- 文档网格目标为每行 28 字、每页 22 行；Word 换算需保留必要的 twip 余量。
+- 普通段落和空段落只允许单倍行距；标题、红头、文号等只允许明确的固定值行距，禁止继承 1.15 倍行距。
+- 主标题华文中宋 2 号加粗、居中、固定 30 磅。
+- 正文仿宋_GB2312 3 号；一级黑体、二级楷体、三级仿宋。
+- 日期右对齐并右空 4 字；落款部门使用半角空格加不换行空格锚点对齐日期中心，不使用右缩进模拟。
+- 红头默认华文中宋 42 磅、红色、固定 48 磅，在 15.6 cm 内安全紧缩或减小字号。
+- 文号仿宋_GB2312 3 号、居中、固定 30 磅；红线宽 15.6 cm、粗 1.4 磅。
+- 版记使用五个独立段落，三条线宽均为 15.6 cm，粗细分别为 1/0.6/1 磅；文字 4 号、单倍、左右各缩进 1 字。
+- 任意文档出现“分送：”版记时，使用普通段落标记补齐到偶数末页底部，不插入分页符或分节符。
+
+## UI 约定
+
+- 顶部一级标签固定为 `文档 / 表格 / 其他`。
+- 文档页内部只保留 `校对结果 / 规则格式`。
+- 不显示顶部产品大标题。
+- 主窗口标题为“办公助手”。
+- 用户可见文案统一使用“校对”。
+- “当前方案”下拉框只显示四个内置方案；“自定义配置”弹层提供导入、导出及程序内副本列表，每个副本行尾提供重命名和删除图标。
+- 自定义配置菜单必须附着在按钮下方并随主窗口移动；导入和导出纵向排列且使用同一控件风格。
+- 文件队列、直接文本输入和结果列表使用控件内空状态提示，内容进入后自动隐藏，不额外堆叠说明标签。
+- 导出配置时同时在 `%APPDATA%\OfficeTool\profiles` 保存程序内副本；重命名和删除只操作该副本，不修改用户另存的 JSON。
+- “添加红头/添加版记”仅对对应红头方案显示，默认关闭且只在校对导出时生效；函不显示添加版记。
+- 默认方案不可重命名或删除，自定义方案操作图标紧邻方案下拉框。
+- 默认窗口尺寸为 1480×900，最小尺寸为 1180×760，控件不得互相遮挡。
+
+## 开发与测试
+
+运行自动化测试：
 
 ```powershell
-& 'C:\Users\10915\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' -m unittest discover -s tests -v
-```
-
-普通本机环境：
-
-```powershell
-python -m pip install -r requirements.txt
-python -m pip install -e .
 python -m unittest discover -s tests -v
 ```
 
-GUI：
+GUI 需要可用的 Tcl/Tk。LibreOffice 复核使用：
 
 ```powershell
-python wfp.py
+& 'C:\Program Files\LibreOffice\program\soffice.com' --headless --convert-to pdf --outdir tests\artifacts\verification input.docx
 ```
 
-审计：
+核心改动必须增加或更新 `unittest`。文档视觉规则同时使用 LibreOffice 转 PDF/PNG 复核，最终产物只保留在本地 `tests/artifacts/verification/`，不得提交到 Git。
 
-```powershell
-python wfp_cli.py audit input.docx --json report.json --markdown report.md
-```
-
-批量审计：
-
-```powershell
-python wfp_cli.py batch-audit docs -r reports --markdown
-```
-
-格式化：
-
-```powershell
-python wfp_cli.py format input.docx -o output.docx --audit-json report.json
-```
-
-批量格式化：
-
-```powershell
-python wfp_cli.py batch-format docs -o out -r reports --markdown
-```
-
-Excel 检查和清洗：
-
-```powershell
-python wfp_cli.py excel inspect input.xlsx --json excel_report.json
-python wfp_cli.py excel clean input.xlsx -o clean.xlsx
-```
-
-DeepSeek AI 审查：
-
-```powershell
-python wfp_cli.py audit input.docx --ai-review --ai-base-url http://deepseek.local:8000/v1 --ai-model deepseek-chat --json report.json
-```
-
-AI 审查默认关闭。内网模型如需鉴权，默认读取 `DEEPSEEK_API_KEY`，也可通过 `--ai-api-key-env` 或配置 `ai_review.api_key_env` 修改。
-
-生成配置：
-
-```powershell
-python -m office_tool init-config -o office_tool_config.json
-```
-
-## 公文规则实现现状
-
-已覆盖：
-
-- A4、页边距、页脚距、固定行距等页面设置。
-- 发文机关标志、发文字号、签发人、标题、主送机关、正文、附件说明、署名、日期、抄送/印发等结构识别。
-- 红头文件版头红色字体、发文字号居中、红色分隔线。
-- 标题层级：`一、`、`（一）`、`1.`、`（1）`。
-- 审计报告的错误、警告、提示分级。
-- 可选 DeepSeek AI 文本审查，补充语义、措辞、一致性和风险表述检查。
-- Excel 工作簿概况检查、文本 trim、空行清理。
-
-暂未覆盖或只做提示：
-
-- `.doc/.wps` 旧格式自动转换。
-- 印章位置、红线精确长度、联合行文特殊版式、命令/纪要/信函格式的全部细项。
-- 每页 22 行、每行 28 字的视觉级分页校验。
-- 企业级权限、任务队列、Web 服务部署。
-
-## 开发注意事项
-
-- 不要把 Excel 工具写进公文处理器；在 `src/office_tool/excel/` 下单独建模块。
-- 新增公文规则时，优先在 `audit.py` 增加可解释审计，再在 `formatter.py` 增加可修复行为。
-- CLI 和 GUI 的批处理能力优先复用 `services.py`，避免入口之间行为分叉。
-- AI 审查只能作为补充层，不要替代确定性格式规则；DeepSeek 调用必须保持可配置、默认关闭，适配内网离线部署。
-- 规则必须可配置，默认值放在 `config.py`。
-- 所有核心行为都要补 `unittest`，尤其是红头版头不能被误识别为标题。
-- 旧入口 `wfp.py`、`wfp_cli.py` 尽量保持可用，便于迁移旧脚本。
-
-## 本次任务完成情况
-
-- 重建项目代码，迁移到 `src/office_tool` 包结构。
-- 实现公文审计、红头识别、结构化报告和基础格式修复。
-- 增加 DeepSeek AI 文本审查模块和 CLI 配置入口。
-- 增加批量审计、批量格式化服务层和桌面 GUI。
-- 增加 Excel 工作簿检查、文本清洗和空行清理工具。
-- 增加默认配置、CLI、兼容入口、规则文档、README 和测试。
-- 已推送到 Gitee `master`，后续改动继续正常提交推送即可。
+编辑时遵循现有模块边界，不恢复已删除的 Excel、打包或日志页面代码，不将 API Key 写入源码、配置样例或测试产物。

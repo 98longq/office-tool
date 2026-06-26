@@ -15,17 +15,17 @@ from ..models import AuditReport
 
 
 SYSTEM_PROMPT = (
-    "\u4f60\u662f\u4e25\u8c28\u7684\u4e2d\u6587\u516c\u6587\u5ba1\u6838\u52a9\u624b\u3002"
-    "\u53ea\u5ba1\u67e5\u7528\u6237\u63d0\u4f9b\u7684\u516c\u6587\u6587\u672c\uff0c"
-    "\u91cd\u70b9\u5173\u6ce8\u6587\u79cd\u662f\u5426\u5339\u914d\u3001\u6807\u9898\u662f\u5426\u51c6\u786e\u3001"
-    "\u4e3b\u9001\u673a\u5173\u3001\u9644\u4ef6\u3001\u65e5\u671f\u662f\u5426\u524d\u540e\u4e00\u81f4\uff0c"
-    "\u8868\u8ff0\u662f\u5426\u7b26\u5408\u515a\u653f\u673a\u5173\u516c\u6587\u98ce\u683c\uff0c"
-    "\u662f\u5426\u5b58\u5728\u8bed\u75c5\u6b67\u4e49\u3001\u8d23\u4efb\u8fb9\u754c\u4e0d\u6e05\u3001"
-    "\u6570\u5b57\u65e5\u671f\u524d\u540e\u77db\u76fe\u3001\u8fc7\u5ea6\u627f\u8bfa\u6216\u4e0d\u9002\u5b9c\u63aa\u8f9e\u3002"
+    "你是严谨的中文公文校对助手。只校对用户提供的公文文本，"
+    "重点关注文种是否匹配、标题是否准确、主送机关、附件、日期是否前后一致，"
+    "表述是否符合党政机关公文风格，是否存在语病歧义、责任边界不清、"
+    "数字日期前后矛盾、过度承诺或不适宜措辞。"
 )
 
 USER_PROMPT_TEMPLATE = (
-    "\u8bf7\u4ee5 JSON \u6570\u7ec4\u8fd4\u56de\u5ba1\u67e5\u7ed3\u679c\uff0c\u4e0d\u8981\u8f93\u51fa\u989d\u5916\u8bf4\u660e\u3002"
+    "请以 JSON 数组返回校对结果，不要输出额外说明。"
+    "category \u8bf7\u4f7f\u7528\u4e2d\u6587\u9519\u8bef\u7c7b\u578b\uff0c\u4f18\u5148\u4ece"
+    "\u683c\u5f0f\u9519\u8bef\u3001\u6f0f\u5b57\u9519\u5b57\u3001\u8bed\u53e5\u4e0d\u5f53\u3001\u8bed\u4e49\u6b67\u4e49\u3001"
+    "\u524d\u540e\u4e0d\u4e00\u81f4\u3001\u98ce\u9669\u8868\u8ff0\u3001\u5176\u4ed6\u5efa\u8bae\u4e2d\u9009\u62e9\u3002"
     "\u6bcf\u9879\u5b57\u6bb5\u4e3a category\u3001severity\u3001message\u3001quote\u3001suggestion\u3002"
     "severity \u53ea\u80fd\u662f error\u3001warning\u3001info\u3002"
     "\u6ca1\u6709\u95ee\u9898\u65f6\u8fd4\u56de []\u3002\n\n"
@@ -101,14 +101,14 @@ class DeepSeekTextReviewer:
                 return json.loads(raw)
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="ignore")
-            raise RuntimeError(f"DeepSeek review request failed: HTTP {exc.code} {detail}") from exc
+            raise RuntimeError(f"DeepSeek 校对请求失败：HTTP {exc.code} {detail}") from exc
         except urllib.error.URLError as exc:
-            raise RuntimeError(f"DeepSeek review request failed: {exc.reason}") from exc
+            raise RuntimeError(f"DeepSeek 校对请求失败：{exc.reason}") from exc
 
     def _resolve_url(self) -> str:
         base_url = self.options.base_url.strip().rstrip("/")
         if not base_url:
-            raise ValueError("AI review is enabled, but DeepSeek URL is empty.")
+            raise ValueError("AI 校对已启用，但 DeepSeek 服务地址为空。")
         endpoint_path = self.options.endpoint_path.strip()
         if not endpoint_path:
             return base_url
@@ -149,9 +149,9 @@ class DeepSeekTextReviewer:
         except json.JSONDecodeError:
             return [
                 AITextFinding(
-                    category="raw_review",
+                    category="原始建议",
                     severity="info",
-                    message="AI returned a non-JSON review. Please inspect the raw suggestion.",
+                    message="AI 未返回标准 JSON，请查看原始建议。",
                     quote="",
                     suggestion=content.strip()[:500],
                 )
@@ -167,9 +167,9 @@ class DeepSeekTextReviewer:
                 severity = "info"
             findings.append(
                 AITextFinding(
-                    category=str(item.get("category", "review")),
+                    category=str(item.get("category", "其他建议")),
                     severity=severity,
-                    message=str(item.get("message", "")).strip() or "AI review finding.",
+                    message=str(item.get("message", "")).strip() or "AI 校对建议。",
                     quote=str(item.get("quote", "")).strip(),
                     suggestion=str(item.get("suggestion", "")).strip(),
                 )
@@ -220,4 +220,4 @@ def extract_json_text(content: str) -> str:
 
 def safe_code(value: str) -> str:
     code = re.sub(r"[^0-9A-Za-z_\u4e00-\u9fff]+", "_", value.strip()).strip("_")
-    return code or "review"
+    return code or "proofreading"
