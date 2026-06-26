@@ -679,7 +679,7 @@ class OfficialDocumentAuditor:
             role = self._typography_role_for_text(report.profile, item.text) or role_by_index.get(item.index)
             if role in expected_by_role and item.paragraph.runs:
                 font, size_pt, bold, message = expected_by_role[role]
-                run = next((run for run in item.paragraph.runs if run.text.strip()), item.paragraph.runs[0])
+                run = self._run_for_east_asia_typography(item.paragraph)
                 actual_font = self._run_east_asia_font(run)
                 actual_size = run.font.size.pt if run.font.size else None
                 actual_bold = run.bold
@@ -722,6 +722,20 @@ class OfficialDocumentAuditor:
 
     def _typography_role_for_text(self, profile: str, text: str) -> str | None:
         return self._heading_role_for_text(text)
+
+    @staticmethod
+    def _run_for_east_asia_typography(paragraph: Paragraph):
+        chinese_run = next(
+            (
+                run
+                for run in paragraph.runs
+                if run.text.strip() and any("\u4e00" <= char <= "\u9fff" for char in run.text)
+            ),
+            None,
+        )
+        if chinese_run is not None:
+            return chinese_run
+        return next((run for run in paragraph.runs if run.text.strip()), paragraph.runs[0])
 
     @staticmethod
     def _paragraph_has_non_times_latin(paragraph: Paragraph) -> bool:

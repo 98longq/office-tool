@@ -100,7 +100,7 @@ class ContentGenerationOptions:
     add_red_head: bool = False
     add_imprint: bool = False
     red_head_title: str = ""
-    document_number: str = ""
+    document_number: str = "某发〔2026〕1号"
     copy_to: str = ""
     print_organization: str = ""
     print_date: str = ""

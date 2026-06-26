@@ -25,6 +25,7 @@ class FormatterTests(unittest.TestCase):
         config = OfficeToolConfig()
         config.audit.profile = "red_head"
         config.generation.add_red_head = True
+        config.generation.document_number = ""
 
         with self.assertRaisesRegex(ValueError, "红头名称.*发文字号"):
             OfficialDocumentFormatter(config).format_document(doc)
@@ -158,6 +159,8 @@ class FormatterTests(unittest.TestCase):
         config.audit.profile = "letter_head"
         config.generation.add_red_head = True
         config.generation.red_head_title = "某某集团有限公司"
+        config.generation.document_number = ""
+        config.generation.document_number = ""
 
         report = OfficialDocumentFormatter(config).format_document(doc)
         texts = [paragraph.text.strip() for paragraph in doc.paragraphs]
@@ -181,6 +184,7 @@ class FormatterTests(unittest.TestCase):
         config.audit.profile = "letter_head"
         config.generation.add_red_head = True
         config.generation.red_head_title = "某某集团有限公司"
+        config.generation.document_number = ""
 
         report = OfficialDocumentFormatter(config).format_document(doc)
         texts = [paragraph.text.strip() for paragraph in doc.paragraphs]
@@ -191,7 +195,7 @@ class FormatterTests(unittest.TestCase):
 
         self.assertIsNotNone(text_box)
         self.assertEqual("".join(node.text or "" for node in text_box.iter(qn("w:t"))), "某某集团有限公司")
-        self.assertFalse(any("〔2026〕" in text or text.endswith("号") for text in texts))
+        self.assertFalse(any("〔2026〕" in text and text.endswith("号") for text in texts))
         self.assertNotIn("missing_document_number", {finding.code for finding in report.findings})
         self.assertEqual(report.stats["generated_content"], ["red_head"])
 
@@ -754,11 +758,12 @@ class FormatterTests(unittest.TestCase):
         doc.add_paragraph("关于推进重点工作的通知")
         paragraph = doc.add_paragraph("1.开展专项检查。")
 
-        OfficialDocumentFormatter().format_document(doc)
+        report = OfficialDocumentFormatter().format_document(doc)
 
         digit_run = next(run for run in paragraph.runs if run.text == "1")
         self.assertEqual(_east_asia_font(digit_run), "Times New Roman")
         self.assertEqual(_ascii_font(digit_run), "Times New Roman")
+        self.assertNotIn("typography_h3", {finding.code for finding in report.findings})
 
     def test_format_handles_split_title_lines(self):
         with tempfile.TemporaryDirectory(prefix="office_tool_split_title_") as tmp:

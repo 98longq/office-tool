@@ -1043,7 +1043,7 @@ class OfficeToolGUI:
         )
         generation_hint = ttk.Label(
             generation_frame,
-            text="单位、文号和日期不设默认值；必填项为空时不导出。普通红头的抄送可留空，届时生成单行简版版记。",
+            text="发文字号提供可编辑示例；必填项为空时不导出。函号可删除留空，普通红头的抄送可留空并生成简版版记。",
             style="TintMuted.TLabel",
             wraplength=900,
         )

@@ -22,6 +22,7 @@ class GuiLogicTests(unittest.TestCase):
         self.assertTrue(config.ai_review.enabled)
         self.assertEqual(config.ai_review.model, "local-model")
         self.assertIsNot(config.ai_review, ai)
+        self.assertEqual(config.generation.document_number, "某发〔2026〕1号")
 
     def test_profile_label_matches_all_document_schemes(self):
         self.assertEqual(_profile_label("standard"), "普通公文")
