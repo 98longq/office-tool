@@ -62,7 +62,8 @@ class FormatterTests(unittest.TestCase):
             and paragraph._p.pPr.pStyle is not None
             and paragraph._p.pPr.pStyle.get(qn("w:val")) == "OfficeToolImprintSpacer"
         )
-        self.assertGreater(imprint_spacers, 22)
+        self.assertGreaterEqual(imprint_spacers, 20)
+        self.assertLessEqual(imprint_spacers, 22)
 
     def test_export_generates_simple_imprint_when_copy_to_is_blank(self):
         doc = Document()
@@ -548,7 +549,7 @@ class FormatterTests(unittest.TestCase):
             self.assertEqual(title_spacing.get(qn("w:after")), "0")
             self.assertEqual(signatory_spacing.get(qn("w:before")), "0")
             self.assertEqual(_indent_chars(formatted.paragraphs[6], "rightChars"), None)
-            self.assertEqual(len(formatted.paragraphs[6].text) - len(formatted.paragraphs[6].text.rstrip()), 11)
+            self.assertEqual(len(formatted.paragraphs[6].text) - len(formatted.paragraphs[6].text.rstrip()), 19)
             self.assertEqual(_indent_chars(formatted.paragraphs[7], "rightChars"), 400)
 
     def test_format_centers_long_signatory_against_date(self):
@@ -573,7 +574,7 @@ class FormatterTests(unittest.TestCase):
             self.assertEqual(
                 len(formatted.paragraphs[signatory_index].text)
                 - len(formatted.paragraphs[signatory_index].text.rstrip()),
-                7,
+                15,
             )
             self.assertEqual(_indent_chars(formatted.paragraphs[date_index], "rightChars"), 400)
 

@@ -601,7 +601,8 @@ class OfficialDocumentFormatter:
         )
         signatory_chars = self._text_width_chars(base_text)
         target_chars = 14.0
-        missing_chars = max(0.0, target_chars - signatory_chars)
+        date_right_indent_chars = 4.0
+        missing_chars = max(0.0, date_right_indent_chars * 2 + target_chars - signatory_chars)
         trailing_spaces = int(round(missing_chars))
         if trailing_spaces:
             spacer_run = paragraph.add_run(" " * max(0, trailing_spaces - 1) + "\u00a0")
@@ -904,6 +905,7 @@ class OfficialDocumentFormatter:
             doc,
             top_line,
             self._estimated_grid_lines(copy_to) + self._estimated_grid_lines(print_line),
+            5,
             "OfficeToolImprintSpacer",
         )
 
@@ -928,6 +930,7 @@ class OfficialDocumentFormatter:
             doc,
             top_line,
             self._estimated_grid_lines(distribution),
+            3,
             "OfficeToolDistributionSpacer",
         )
 
@@ -952,6 +955,7 @@ class OfficialDocumentFormatter:
             doc,
             top_line,
             self._estimated_grid_lines(imprint),
+            3,
             "OfficeToolDistributionSpacer",
         )
 
@@ -976,6 +980,7 @@ class OfficialDocumentFormatter:
         doc: DocxDocument,
         top_line: Paragraph,
         reserved_text_lines: int,
+        block_paragraphs: int,
         style_id: str,
     ) -> None:
         page = 1
@@ -1010,7 +1015,7 @@ class OfficialDocumentFormatter:
                 self._estimated_grid_lines(paragraph),
             )
 
-        reserved = max(1, min(self.config.page.lines_per_page, reserved_text_lines))
+        reserved = max(1, min(self.config.page.lines_per_page, reserved_text_lines + block_paragraphs))
         target_page = page if page % 2 == 0 else page + 1
         target_before = (
             (target_page - 1) * self.config.page.lines_per_page
