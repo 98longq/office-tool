@@ -45,7 +45,7 @@ RE_ATTACHMENT_END_PUNCT = re.compile(r"[。；;，,、.!！?？]$")
 RE_DATE = re.compile(
     r"((?:\d{4}|[二〇零一二三四五六七八九十]{4})年\s*(?:\d{1,2}|" + CHINESE_NUM + r")月\s*(?:\d{1,2}|" + CHINESE_NUM + r")日)"
 )
-RE_ARABIC_DATE = re.compile(r"\d{4}年(?:[1-9]|1[0-2])月(?:[1-9]|[12]\d|3[01])日")
+RE_ARABIC_DATE = re.compile(r"\d{4}年(?:0[1-9]|1[0-2])月(?:0[1-9]|[12]\d|3[01])日")
 RE_COPY_TO = re.compile(r"^(抄送|抄报|发送)\s*[:：]")
 RE_PRINT_ORG_DATE = re.compile(r"(印发|印制)\s*$|(?:\d{4}年\d{1,2}月\d{1,2}日印发)")
 RE_OBSOLETE_SUBJECT = re.compile(r"^主题词\s*[:：]")

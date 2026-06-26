@@ -232,6 +232,18 @@ class AuditTests(unittest.TestCase):
         self.assertIn("attachment_name_has_punctuation", codes)
         self.assertIn("bad_effective_date_wording", codes)
 
+    def test_unit_rules_accept_padded_422_document_date(self):
+        doc = Document()
+        doc.add_paragraph("关于印发测试办法的通知")
+        doc.add_paragraph("各部门：")
+        doc.add_paragraph("正文。")
+        doc.add_paragraph("办公室")
+        doc.add_paragraph("2026年06月23日")
+
+        report = OfficialDocumentAuditor().audit_document(doc)
+
+        self.assertNotIn("date_not_arabic", {finding.code for finding in report.findings})
+
     def test_unit_rules_hint_long_title_and_imprint_lines(self):
         doc = Document()
         doc.add_paragraph("关于进一步加强机关内部综合事务协同办理规范化管理和重点工作闭环落实的通知")

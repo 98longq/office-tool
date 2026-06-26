@@ -548,7 +548,7 @@ class FormatterTests(unittest.TestCase):
             self.assertEqual(title_spacing.get(qn("w:after")), "0")
             self.assertEqual(signatory_spacing.get(qn("w:before")), "0")
             self.assertEqual(_indent_chars(formatted.paragraphs[6], "rightChars"), None)
-            self.assertEqual(len(formatted.paragraphs[6].text) - len(formatted.paragraphs[6].text.rstrip()), 22)
+            self.assertEqual(len(formatted.paragraphs[6].text) - len(formatted.paragraphs[6].text.rstrip()), 11)
             self.assertEqual(_indent_chars(formatted.paragraphs[7], "rightChars"), 400)
 
     def test_format_centers_long_signatory_against_date(self):
@@ -573,7 +573,7 @@ class FormatterTests(unittest.TestCase):
             self.assertEqual(
                 len(formatted.paragraphs[signatory_index].text)
                 - len(formatted.paragraphs[signatory_index].text.rstrip()),
-                14,
+                7,
             )
             self.assertEqual(_indent_chars(formatted.paragraphs[date_index], "rightChars"), 400)
 

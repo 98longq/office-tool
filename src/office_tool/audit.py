@@ -950,12 +950,13 @@ class OfficialDocumentAuditor:
                 report.add_finding(
                     "date_not_arabic",
                     "warning",
-                    "成文日期应使用阿拉伯数字，年份写全称，月日不编虚位。",
+                    "成文日期应使用阿拉伯数字，并统一为 YYYY年MM月DD日 格式。",
                     block_index=structure.date,
                     text=date_text,
-                    expected="2026年6月13日",
+                    expected="2026年06月13日",
                     actual=match.group(0),
-                    can_fix=False,
+                    suggestion="执行校对导出可将成文日期补齐为 4-2-2 格式。",
+                    can_fix=True,
                 )
 
         if self.config.audit.check_attachment_format:

@@ -602,7 +602,7 @@ class OfficialDocumentFormatter:
         signatory_chars = self._text_width_chars(base_text)
         target_chars = 14.0
         missing_chars = max(0.0, target_chars - signatory_chars)
-        trailing_spaces = int(round(missing_chars * 2))
+        trailing_spaces = int(round(missing_chars))
         if trailing_spaces:
             spacer_run = paragraph.add_run(" " * max(0, trailing_spaces - 1) + "\u00a0")
             style = self.config.styles["signatory"]
@@ -900,7 +900,12 @@ class OfficialDocumentFormatter:
         for paragraph in positions:
             clear_paragraph_frame(paragraph)
             self._clear_pagination_flags(paragraph)
-        self._insert_imprint_spacers(doc, top_line)
+        self._insert_block_spacers(
+            doc,
+            top_line,
+            self._estimated_grid_lines(copy_to) + self._estimated_grid_lines(print_line),
+            "OfficeToolImprintSpacer",
+        )
 
     def _apply_distribution_layout(
         self,
@@ -919,7 +924,12 @@ class OfficialDocumentFormatter:
         bottom_line = self._new_line_paragraph_after(distribution, "OfficeToolDistributionBottomLine", 1.0)
         for paragraph in (top_line, distribution, bottom_line):
             self._clear_pagination_flags(paragraph)
-        self._insert_distribution_spacers(doc, top_line)
+        self._insert_block_spacers(
+            doc,
+            top_line,
+            self._estimated_grid_lines(distribution),
+            "OfficeToolDistributionSpacer",
+        )
 
     def _apply_simple_imprint_layout(
         self,
@@ -938,7 +948,12 @@ class OfficialDocumentFormatter:
         bottom_line = self._new_line_paragraph_after(imprint, "OfficeToolSimpleImprintBottomLine", 1.0)
         for paragraph in (top_line, imprint, bottom_line):
             self._clear_pagination_flags(paragraph)
-        self._insert_distribution_spacers(doc, top_line)
+        self._insert_block_spacers(
+            doc,
+            top_line,
+            self._estimated_grid_lines(imprint),
+            "OfficeToolDistributionSpacer",
+        )
 
     @staticmethod
     def _remove_generated_simple_imprint(doc: DocxDocument) -> None:
@@ -956,7 +971,13 @@ class OfficialDocumentFormatter:
             if any(line.get("id") in ids for line in element.iter(tag)):
                 body.remove(element)
 
-    def _insert_distribution_spacers(self, doc: DocxDocument, top_line: Paragraph) -> None:
+    def _insert_block_spacers(
+        self,
+        doc: DocxDocument,
+        top_line: Paragraph,
+        reserved_text_lines: int,
+        style_id: str,
+    ) -> None:
         page = 1
         line = 0
         for element in doc._element.body.iterchildren():
@@ -989,18 +1010,33 @@ class OfficialDocumentFormatter:
                 self._estimated_grid_lines(paragraph),
             )
 
+        reserved = max(1, min(self.config.page.lines_per_page, reserved_text_lines))
         target_page = page if page % 2 == 0 else page + 1
-        target_before = (target_page - 1) * self.config.page.lines_per_page + self.config.page.lines_per_page - 4
+        target_before = (
+            (target_page - 1) * self.config.page.lines_per_page
+            + self.config.page.lines_per_page
+            - reserved
+        )
         current = (page - 1) * self.config.page.lines_per_page + line
         while target_before < current:
             target_page += 2
-            target_before = (target_page - 1) * self.config.page.lines_per_page + self.config.page.lines_per_page - 4
+            target_before = (
+                (target_page - 1) * self.config.page.lines_per_page
+                + self.config.page.lines_per_page
+                - reserved
+            )
         for _ in range(max(0, target_before - current)):
             element = OxmlElement("w:p")
             p_pr = OxmlElement("w:pPr")
             style = OxmlElement("w:pStyle")
-            style.set(qn("w:val"), "OfficeToolDistributionSpacer")
+            style.set(qn("w:val"), style_id)
             p_pr.append(style)
+            spacing = OxmlElement("w:spacing")
+            spacing.set(qn("w:before"), "0")
+            spacing.set(qn("w:after"), "0")
+            spacing.set(qn("w:lineRule"), "exact")
+            spacing.set(qn("w:line"), str(int(round(self.config.page.grid_line_pitch_pt * 20))))
+            p_pr.append(spacing)
             element.append(p_pr)
             top_line._p.addprevious(element)
 
@@ -1019,54 +1055,6 @@ class OfficialDocumentFormatter:
                 continue
             if any(line.get("id") in ids for line in element.iter(tag)):
                 body.remove(element)
-
-    def _insert_imprint_spacers(self, doc: DocxDocument, top_line: Paragraph) -> None:
-        page = 1
-        used_lines = 0
-        for element in doc._element.body.iterchildren():
-            if element is top_line._p:
-                break
-            if element.tag == qn("w:tbl"):
-                page, used_lines = self._advance_grid_position(
-                    page,
-                    used_lines,
-                    self._estimated_table_lines(Table(element, doc._body)),
-                )
-                continue
-            if element.tag != qn("w:p"):
-                continue
-            paragraph = Paragraph(element, doc._body)
-            if paragraph.paragraph_format.page_break_before and used_lines:
-                page += 1
-                used_lines = 0
-            page_breaks = sum(
-                1 for br in paragraph._p.iter(qn("w:br")) if br.get(qn("w:type")) == "page"
-            )
-            if page_breaks:
-                page += page_breaks
-                used_lines = 0
-                if not paragraph.text.strip():
-                    continue
-            page, used_lines = self._advance_grid_position(
-                page,
-                used_lines,
-                self._estimated_grid_lines(paragraph),
-            )
-
-        target_page = page if page % 2 == 0 else page + 1
-        target_before = (target_page - 1) * self.config.page.lines_per_page + self.config.page.lines_per_page - 2
-        current = (page - 1) * self.config.page.lines_per_page + used_lines
-        while target_before < current:
-            target_page += 2
-            target_before = (target_page - 1) * self.config.page.lines_per_page + self.config.page.lines_per_page - 2
-        for _ in range(max(0, target_before - current)):
-            element = OxmlElement("w:p")
-            p_pr = OxmlElement("w:pPr")
-            style = OxmlElement("w:pStyle")
-            style.set(qn("w:val"), "OfficeToolImprintSpacer")
-            p_pr.append(style)
-            element.append(p_pr)
-            top_line._p.addprevious(element)
 
     def _advance_grid_position(self, page: int, line: int, added_lines: int) -> tuple[int, int]:
         line += max(0, added_lines)
