@@ -17,6 +17,8 @@ from .ai import DeepSeekTextReviewer
 from .config import AIReviewOptions, OfficeToolConfig
 from .services import audit_many, format_many, summarize_results
 from .table_audit import TableWorkbookInspector, collect_table_inputs
+from .table_merge import merge_by_columns
+from .table_models import SourceColumnMapping, TableMergeOptions
 from .profile_store import ConfigProfileStore
 from .secret_store import protect_secret, unprotect_secret
 
@@ -178,6 +180,15 @@ def _text_without_placeholder(widget: tk.Text | None) -> str:
     if widget is None or getattr(widget, "_office_tool_placeholder_active", False):
         return ""
     return widget.get("1.0", tk.END).strip()
+
+
+def _first_sheet_name(path: str | Path) -> str:
+    try:
+        from openpyxl import load_workbook
+    except ImportError as exc:
+        raise RuntimeError("表格功能需要安装 openpyxl。") from exc
+    workbook = load_workbook(path, read_only=True)
+    return workbook.sheetnames[0]
 
 FINDING_TYPE_BY_CODE = {
     "missing_title": "结构缺失",
@@ -354,6 +365,7 @@ class OfficeToolGUI:
 
         self.document_paths: list[Path] = []
         self.table_paths: list[Path] = []
+        self.table_master_path: Path | None = None
         self.direct_text: tk.Text | None = None
         self.doc_list_placeholder: tk.Label | None = None
         self.table_list_placeholder: tk.Label | None = None
@@ -361,6 +373,15 @@ class OfficeToolGUI:
         self.result_tree_placeholder: tk.Label | None = None
         self.doc_output_dir = tk.StringVar()
         self.doc_report_dir = tk.StringVar()
+        self.table_master_file = tk.StringVar()
+        self.table_master_sheet = tk.StringVar(value="总表")
+        self.table_master_key_column = tk.StringVar(value="任务名称")
+        self.table_master_target_column = tk.StringVar(value="办理情况")
+        self.table_source_sheet = tk.StringVar()
+        self.table_source_key_column = tk.StringVar(value="任务名称")
+        self.table_source_value_column = tk.StringVar(value="回复内容")
+        self.table_output_file = tk.StringVar()
+        self.status_text = tk.StringVar(value="就绪")
         self.ai_enabled = tk.BooleanVar(value=False)
         self.ai_base_url = tk.StringVar()
         self.ai_model = tk.StringVar(value="deepseek-chat")
@@ -679,7 +700,6 @@ class OfficeToolGUI:
         notebook.add(self._results_tab(notebook), text="校对结果")
         notebook.add(self._audit_tab(notebook), text="规则格式")
 
-        self.status_text = tk.StringVar(value="就绪")
         status = ttk.Frame(document_page, style="Tint.TFrame", padding=(12, 8))
         status.grid(row=1, column=0, sticky="ew", pady=(14, 0))
         ttk.Label(status, textvariable=self.status_text, style="Status.TLabel").pack(anchor="w")
@@ -701,35 +721,42 @@ class OfficeToolGUI:
 
         main = ttk.Frame(page, style="TFrame")
         main.grid(row=0, column=0, sticky="nsew")
-        main.columnconfigure(0, weight=2, uniform="table")
-        main.columnconfigure(1, weight=3, uniform="table")
+        main.columnconfigure(0, weight=5, uniform="table")
+        main.columnconfigure(1, weight=6, uniform="table")
         main.rowconfigure(0, weight=1)
 
         left = ttk.Frame(main, style="Card.TFrame", padding=(20, 18, 20, 18))
         left.grid(row=0, column=0, sticky="nsew", padx=(0, 16))
         left.columnconfigure(0, weight=1)
-        left.rowconfigure(1, weight=1)
+        left.rowconfigure(3, weight=1)
 
-        tools = ttk.Frame(left, style="Toolbar.TFrame")
-        tools.grid(row=0, column=0, sticky="ew")
-        for column in range(2):
-            tools.columnconfigure(column, weight=1, uniform="table_tools")
-        for index, (text, command) in enumerate([
-            ("添加表格", self.add_table_files),
-            ("添加文件夹", self.add_table_folder),
-            ("移除选中", self.remove_selected_tables),
-            ("清空列表", self.clear_tables),
-        ]):
-            ttk.Button(tools, text=text, style="Workbench.TButton", command=command).grid(
-                row=index // 2,
-                column=index % 2,
-                sticky="ew",
-                padx=(0, 6) if index % 2 == 0 else (6, 0),
-                pady=(0, 6) if index < 2 else (0, 0),
-            )
+        ttk.Label(left, text="主表", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        master = ttk.Frame(left, style="Card.TFrame")
+        master.grid(row=1, column=0, sticky="ew", pady=(8, 16))
+        master.columnconfigure(1, weight=1)
+        ttk.Button(master, text="选择主表", style="Workbench.TButton", command=self.choose_table_master).grid(row=0, column=0, sticky="ew", padx=(0, 10))
+        ttk.Entry(master, textvariable=self.table_master_file).grid(row=0, column=1, sticky="ew")
+
+        config = ttk.Frame(left, style="Tint.TFrame", padding=(14, 12))
+        config.grid(row=2, column=0, sticky="ew", pady=(0, 16))
+        for column in range(4):
+            config.columnconfigure(column, weight=1)
+        table_fields = [
+            ("主表工作表", self.table_master_sheet),
+            ("主表校验列", self.table_master_key_column),
+            ("主表填入列", self.table_master_target_column),
+            ("副表工作表", self.table_source_sheet),
+            ("副表校验列", self.table_source_key_column),
+            ("副表数据列", self.table_source_value_column),
+        ]
+        for index, (label, variable) in enumerate(table_fields):
+            row = index // 2
+            col = (index % 2) * 2
+            ttk.Label(config, text=label, style="TintMuted.TLabel").grid(row=row, column=col, sticky="w", padx=(0, 8), pady=5)
+            ttk.Entry(config, textvariable=variable).grid(row=row, column=col + 1, sticky="ew", padx=(0, 12), pady=5)
 
         list_wrap = ttk.Frame(left, style="Tint.TFrame", padding=1)
-        list_wrap.grid(row=1, column=0, sticky="nsew", pady=(14, 0))
+        list_wrap.grid(row=3, column=0, sticky="nsew")
         list_wrap.columnconfigure(0, weight=1)
         list_wrap.rowconfigure(0, weight=1)
         self.table_list = tk.Listbox(list_wrap, activestyle="none", exportselection=False)
@@ -739,18 +766,45 @@ class OfficeToolGUI:
         self.table_list.configure(yscrollcommand=table_scroll.set)
         self.table_list_placeholder = tk.Label(
             self.table_list,
-            text="添加 .xlsx 文件后，可检查工作表和表头",
+            text="添加一个或多个副表文件",
             bg=COLOR["white"],
             fg=COLOR["subtle"],
             font=(FONT_FAMILY, 9),
         )
         self.table_list_placeholder.place(relx=0.5, rely=0.5, anchor="center")
 
+        source_tools = ttk.Frame(left, style="Toolbar.TFrame")
+        source_tools.grid(row=4, column=0, sticky="ew", pady=(12, 0))
+        for column in range(4):
+            source_tools.columnconfigure(column, weight=1, uniform="source_tools")
+        for index, (text, command) in enumerate([
+            ("添加副表", self.add_table_files),
+            ("添加文件夹", self.add_table_folder),
+            ("移除副表", self.remove_selected_tables),
+            ("清空副表", self.clear_tables),
+        ]):
+            ttk.Button(source_tools, text=text, style="Workbench.TButton", command=command).grid(
+                row=0,
+                column=index,
+                sticky="ew",
+                padx=(0, 8) if index < 3 else (0, 0),
+            )
+
+        output = ttk.Frame(left, style="Card.TFrame")
+        output.grid(row=5, column=0, sticky="ew", pady=(16, 0))
+        output.columnconfigure(1, weight=1)
+        ttk.Button(output, text="导出位置", style="Secondary.TButton", command=self.choose_table_output).grid(row=0, column=0, sticky="ew", padx=(0, 10))
+        ttk.Entry(output, textvariable=self.table_output_file).grid(row=0, column=1, sticky="ew")
+
         actions = ttk.Frame(left, style="Card.TFrame")
-        actions.grid(row=2, column=0, sticky="ew", pady=(16, 0))
-        actions.columnconfigure(0, weight=1)
-        ttk.Button(actions, text="检查表格", style="Primary.TButton", command=self.inspect_tables).grid(
-            row=0, column=0, sticky="ew"
+        actions.grid(row=6, column=0, sticky="ew", pady=(16, 0))
+        actions.columnconfigure(0, weight=1, uniform="table_actions")
+        actions.columnconfigure(1, weight=1, uniform="table_actions")
+        ttk.Button(actions, text="检查结构", style="Secondary.TButton", command=self.inspect_tables).grid(
+            row=0, column=0, sticky="ew", padx=(0, 8)
+        )
+        ttk.Button(actions, text="汇总导出", style="Primary.TButton", command=self.merge_tables).grid(
+            row=0, column=1, sticky="ew"
         )
 
         right = ttk.Frame(main, style="Card.TFrame", padding=(18, 16, 18, 16))
@@ -793,7 +847,11 @@ class OfficeToolGUI:
         detail_scroll = ttk.Scrollbar(detail_wrap, orient="vertical", command=self.table_detail_text.yview)
         detail_scroll.grid(row=0, column=1, sticky="ns")
         self.table_detail_text.configure(yscrollcommand=detail_scroll.set)
-        self._set_table_detail("选中上方任意一张工作表，可查看表头和合并单元格。")
+        self._set_table_detail("选择主表和副表后，可先检查结构，再按配置汇总导出。")
+
+        status = ttk.Frame(page, style="Tint.TFrame", padding=(12, 8))
+        status.grid(row=1, column=0, sticky="ew", pady=(14, 0))
+        ttk.Label(status, textvariable=self.status_text, style="Status.TLabel").pack(anchor="w")
 
         return page
 
@@ -1333,12 +1391,21 @@ class OfficeToolGUI:
         paths = filedialog.askopenfilenames(title="选择公文文件", filetypes=[("支持的文档", "*.doc *.docx *.txt *.md"), ("所有文件", "*.*")])
         self._add_document_paths(paths)
 
+    def choose_table_master(self) -> None:
+        path = filedialog.askopenfilename(title="选择主表", filetypes=[("Excel 工作簿", "*.xlsx"), ("所有文件", "*.*")])
+        if not path:
+            return
+        self.table_master_path = Path(path).resolve()
+        self.table_master_file.set(str(self.table_master_path))
+        self.table_output_file.set(str(self.table_master_path.with_name(f"{self.table_master_path.stem}_汇总结果.xlsx")))
+        self.status_text.set("已选择主表")
+
     def add_table_files(self) -> None:
-        paths = filedialog.askopenfilenames(title="选择表格文件", filetypes=[("Excel 工作簿", "*.xlsx"), ("所有文件", "*.*")])
+        paths = filedialog.askopenfilenames(title="选择副表文件", filetypes=[("Excel 工作簿", "*.xlsx"), ("所有文件", "*.*")])
         self._add_table_paths(paths)
 
     def add_table_folder(self) -> None:
-        folder = filedialog.askdirectory(title="选择表格文件夹")
+        folder = filedialog.askdirectory(title="选择副表文件夹")
         if folder:
             self._add_table_paths([folder])
 
@@ -1374,11 +1441,23 @@ class OfficeToolGUI:
         else:
             self.table_list_placeholder.place(relx=0.5, rely=0.5, anchor="center")
 
+    def choose_table_output(self) -> None:
+        initial = Path(self.table_output_file.get()).expanduser() if self.table_output_file.get() else None
+        initial_dir = initial.parent if initial else Path.cwd()
+        initial_file = initial.name if initial else "表格汇总结果.xlsx"
+        path = filedialog.asksaveasfilename(
+            title="保存汇总结果",
+            initialdir=str(initial_dir),
+            initialfile=initial_file,
+            defaultextension=".xlsx",
+            filetypes=[("Excel 工作簿", "*.xlsx")],
+        )
+        if path:
+            self.table_output_file.set(str(Path(path).resolve()))
+
     def inspect_tables(self) -> None:
         try:
-            if not self.table_paths:
-                raise ValueError("请先添加 .xlsx 表格文件或文件夹。")
-            paths = list(self.table_paths)
+            paths = self._table_inspection_paths()
             self._clear_table_results()
             self.status_text.set("正在检查表格...")
 
@@ -1393,6 +1472,93 @@ class OfficeToolGUI:
         except Exception as exc:
             self.status_text.set("表格检查失败")
             messagebox.showerror("表格检查失败", str(exc))
+
+    def merge_tables(self) -> None:
+        try:
+            master_path = self._table_master_path_from_form()
+            source_paths = collect_table_inputs(self.table_paths)
+            output_path = self._table_output_path(master_path)
+            master_sheet = self.table_master_sheet.get().strip()
+            master_key = self.table_master_key_column.get().strip()
+            master_target = self.table_master_target_column.get().strip()
+            source_sheet = self.table_source_sheet.get().strip()
+            source_key = self.table_source_key_column.get().strip()
+            source_value = self.table_source_value_column.get().strip()
+            missing = [
+                label
+                for label, value in [
+                    ("主表工作表", master_sheet),
+                    ("主表校验列", master_key),
+                    ("主表填入列", master_target),
+                    ("副表校验列", source_key),
+                    ("副表数据列", source_value),
+                ]
+                if not value
+            ]
+            if missing:
+                raise ValueError("请先填写：" + "、".join(missing))
+            self._clear_table_results()
+            self.status_text.set("正在汇总表格...")
+
+            def work():
+                sources = [
+                    SourceColumnMapping(
+                        path=path,
+                        sheet=source_sheet or _first_sheet_name(path),
+                        key_column=source_key,
+                        value_column=source_value,
+                    )
+                    for path in source_paths
+                ]
+                return merge_by_columns(
+                    TableMergeOptions(
+                        master_path=master_path,
+                        output_path=output_path,
+                        master_sheet=master_sheet,
+                        master_key_column=master_key,
+                        master_target_column=master_target,
+                        sources=sources,
+                    )
+                )
+
+            def done(report):
+                self._show_table_report(report)
+                self.status_text.set(f"{report.summary()} 输出：{output_path}")
+                self._set_table_detail(self._format_table_merge_summary(report, output_path))
+
+            self._run_background("表格汇总", work, done)
+        except Exception as exc:
+            self.status_text.set("表格汇总失败")
+            messagebox.showerror("表格汇总失败", str(exc))
+
+    def _table_inspection_paths(self) -> list[Path]:
+        paths: list[Path] = []
+        master_path = self._table_master_path_from_form(required=False)
+        if master_path is not None:
+            paths.append(master_path)
+        if self.table_paths:
+            paths.extend(collect_table_inputs(self.table_paths))
+        if not paths:
+            raise ValueError("请先选择主表，或添加副表文件。")
+        return paths
+
+    def _table_master_path_from_form(self, required: bool = True) -> Path | None:
+        raw = self.table_master_file.get().strip()
+        if raw:
+            self.table_master_path = Path(raw).expanduser().resolve()
+        if self.table_master_path is None:
+            if required:
+                raise ValueError("请先选择主表。")
+            return None
+        if not self.table_master_path.exists():
+            raise FileNotFoundError(f"主表不存在: {self.table_master_path}")
+        return self.table_master_path
+
+    def _table_output_path(self, master_path: Path) -> Path:
+        raw = self.table_output_file.get().strip()
+        output = Path(raw).expanduser().resolve() if raw else master_path.with_name(f"{master_path.stem}_汇总结果.xlsx")
+        self.table_output_file.set(str(output))
+        return output
 
     def add_document_folder(self) -> None:
         folder = filedialog.askdirectory(title="选择文件夹")
@@ -2179,6 +2345,30 @@ class OfficeToolGUI:
             parts.extend(["", "实际内容：", finding.actual])
         if finding.suggestion:
             parts.extend(["", "处理建议：", finding.suggestion])
+        return "\n".join(parts)
+
+    @staticmethod
+    def _format_table_merge_summary(report, output_path: Path) -> str:
+        parts = [
+            "汇总导出完成",
+            f"输出文件：{output_path}",
+            "",
+            "统计：",
+            f"副表数量：{report.stats.get('sources', 0)}",
+            f"更新单元格：{report.stats.get('updated_cells', 0)}",
+            f"追加内容条数：{report.stats.get('appended_values', 0)}",
+            "",
+            "提示：",
+        ]
+        if report.findings:
+            for finding in report.findings[:20]:
+                location = finding.sheet or Path(finding.workbook).name
+                row = "" if finding.row is None else f" 第 {finding.row} 行"
+                parts.append(f"[{finding.severity}] {location}{row}：{finding.message}")
+            if len(report.findings) > 20:
+                parts.append(f"还有 {len(report.findings) - 20} 条提示，请在上方结果列表中查看。")
+        else:
+            parts.append("无")
         return "\n".join(parts)
 
     def _show_selected_table_result(self, _event=None) -> None:

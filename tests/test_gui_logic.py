@@ -7,7 +7,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from office_tool.config import AIReviewOptions
 from office_tool.gui import OfficeToolGUI, _attached_popup_geometry, _default_gui_config, _profile_label
-from office_tool.table_models import SheetInfo
+from office_tool.table_models import SheetInfo, TableReport
 
 
 class GuiLogicTests(unittest.TestCase):
@@ -78,6 +78,16 @@ class GuiLogicTests(unittest.TestCase):
         self.assertIn("识别表头行：第 2 行", detail)
         self.assertIn("2. 办理情况", detail)
         self.assertIn("A1:C1", detail)
+
+    def test_table_merge_summary_reports_output_and_findings(self):
+        report = TableReport(stats={"sources": 2, "updated_cells": 3, "appended_values": 5})
+        report.add_finding("unused_source_value", "info", "副表数据未匹配到主表行。", sheet="办公室", row=6)
+
+        detail = OfficeToolGUI._format_table_merge_summary(report, Path("out.xlsx"))
+
+        self.assertIn("输出文件：out.xlsx", detail)
+        self.assertIn("更新单元格：3", detail)
+        self.assertIn("[info] 办公室 第 6 行：副表数据未匹配到主表行。", detail)
 
 
 if __name__ == "__main__":
