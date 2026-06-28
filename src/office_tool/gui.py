@@ -16,6 +16,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from .ai import DeepSeekTextReviewer
 from .config import AIReviewOptions, OfficeToolConfig
 from .services import audit_many, format_many, summarize_results
+from .table_audit import TableWorkbookInspector, collect_table_inputs
 from .profile_store import ConfigProfileStore
 from .secret_store import protect_secret, unprotect_secret
 
@@ -352,8 +353,11 @@ class OfficeToolGUI:
         self._app_icon = _install_app_icon(self.root)
 
         self.document_paths: list[Path] = []
+        self.table_paths: list[Path] = []
         self.direct_text: tk.Text | None = None
         self.doc_list_placeholder: tk.Label | None = None
+        self.table_list_placeholder: tk.Label | None = None
+        self.table_tree_placeholder: tk.Label | None = None
         self.result_tree_placeholder: tk.Label | None = None
         self.doc_output_dir = tk.StringVar()
         self.doc_report_dir = tk.StringVar()
@@ -384,6 +388,7 @@ class OfficeToolGUI:
         self._refresh_generation_panel = lambda: None
         self._apply_scheme_callback = lambda _name: None
         self.result_details: dict[str, str] = {}
+        self.table_details: dict[str, str] = {}
 
         self._init_config_vars()
         self._load_ai_profiles()
@@ -573,7 +578,7 @@ class OfficeToolGUI:
         document_page.columnconfigure(0, weight=1)
         document_page.rowconfigure(0, weight=1)
         workspace.add(document_page, text="文档")
-        workspace.add(self._placeholder_tab(workspace, "表格功能正在开发中"), text="表格")
+        workspace.add(self._table_page(workspace), text="表格")
         workspace.add(self._placeholder_tab(workspace, "其他功能正在开发中"), text="其他")
 
         main = ttk.Frame(document_page, style="TFrame")
@@ -688,6 +693,109 @@ class OfficeToolGUI:
         panel.grid(row=0, column=0)
         ttk.Label(panel, text=message, style="Tint.TLabel", font=(FONT_FAMILY, 12, "bold")).pack()
         return frame
+
+    def _table_page(self, parent: ttk.Notebook) -> ttk.Frame:
+        page = ttk.Frame(parent, style="TFrame", padding=(0, 4, 0, 0))
+        page.columnconfigure(0, weight=1)
+        page.rowconfigure(0, weight=1)
+
+        main = ttk.Frame(page, style="TFrame")
+        main.grid(row=0, column=0, sticky="nsew")
+        main.columnconfigure(0, weight=2, uniform="table")
+        main.columnconfigure(1, weight=3, uniform="table")
+        main.rowconfigure(0, weight=1)
+
+        left = ttk.Frame(main, style="Card.TFrame", padding=(20, 18, 20, 18))
+        left.grid(row=0, column=0, sticky="nsew", padx=(0, 16))
+        left.columnconfigure(0, weight=1)
+        left.rowconfigure(1, weight=1)
+
+        tools = ttk.Frame(left, style="Toolbar.TFrame")
+        tools.grid(row=0, column=0, sticky="ew")
+        for column in range(2):
+            tools.columnconfigure(column, weight=1, uniform="table_tools")
+        for index, (text, command) in enumerate([
+            ("添加表格", self.add_table_files),
+            ("添加文件夹", self.add_table_folder),
+            ("移除选中", self.remove_selected_tables),
+            ("清空列表", self.clear_tables),
+        ]):
+            ttk.Button(tools, text=text, style="Workbench.TButton", command=command).grid(
+                row=index // 2,
+                column=index % 2,
+                sticky="ew",
+                padx=(0, 6) if index % 2 == 0 else (6, 0),
+                pady=(0, 6) if index < 2 else (0, 0),
+            )
+
+        list_wrap = ttk.Frame(left, style="Tint.TFrame", padding=1)
+        list_wrap.grid(row=1, column=0, sticky="nsew", pady=(14, 0))
+        list_wrap.columnconfigure(0, weight=1)
+        list_wrap.rowconfigure(0, weight=1)
+        self.table_list = tk.Listbox(list_wrap, activestyle="none", exportselection=False)
+        self.table_list.grid(row=0, column=0, sticky="nsew")
+        table_scroll = ttk.Scrollbar(list_wrap, orient="vertical", command=self.table_list.yview)
+        table_scroll.grid(row=0, column=1, sticky="ns")
+        self.table_list.configure(yscrollcommand=table_scroll.set)
+        self.table_list_placeholder = tk.Label(
+            self.table_list,
+            text="添加 .xlsx 文件后，可检查工作表和表头",
+            bg=COLOR["white"],
+            fg=COLOR["subtle"],
+            font=(FONT_FAMILY, 9),
+        )
+        self.table_list_placeholder.place(relx=0.5, rely=0.5, anchor="center")
+
+        actions = ttk.Frame(left, style="Card.TFrame")
+        actions.grid(row=2, column=0, sticky="ew", pady=(16, 0))
+        actions.columnconfigure(0, weight=1)
+        ttk.Button(actions, text="检查表格", style="Primary.TButton", command=self.inspect_tables).grid(
+            row=0, column=0, sticky="ew"
+        )
+
+        right = ttk.Frame(main, style="Card.TFrame", padding=(18, 16, 18, 16))
+        right.grid(row=0, column=1, sticky="nsew")
+        right.columnconfigure(0, weight=1)
+        right.rowconfigure(0, weight=1)
+        right.rowconfigure(2, weight=1)
+
+        columns = ("file", "sheet", "header", "columns", "merged")
+        self.table_tree = ttk.Treeview(right, columns=columns, show="headings", height=11)
+        headings = {"file": "文件", "sheet": "工作表", "header": "表头行", "columns": "列数", "merged": "合并单元格"}
+        widths = {"file": 170, "sheet": 150, "header": 80, "columns": 70, "merged": 220}
+        for col in columns:
+            self.table_tree.heading(col, text=headings[col])
+            self.table_tree.column(col, width=widths[col], minwidth=60, stretch=col == "merged")
+        self.table_tree.grid(row=0, column=0, sticky="nsew")
+        tree_scroll = ttk.Scrollbar(right, orient="vertical", command=self.table_tree.yview)
+        tree_scroll.grid(row=0, column=1, sticky="ns")
+        self.table_tree.configure(yscrollcommand=tree_scroll.set)
+        self.table_tree.bind("<<TreeviewSelect>>", self._show_selected_table_result)
+        self.table_tree_placeholder = tk.Label(
+            self.table_tree,
+            text="检查结果将在这里显示",
+            bg=COLOR["white"],
+            fg=COLOR["subtle"],
+            font=(FONT_FAMILY, 9),
+        )
+        self.table_tree_placeholder.place(relx=0.5, rely=0.5, anchor="center")
+
+        footer = ttk.Frame(right, style="Card.TFrame")
+        footer.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+        ttk.Label(footer, text="详情", style="ResultHint.TLabel").pack(anchor="w")
+
+        detail_wrap = ttk.Frame(right, style="Tint.TFrame", padding=1)
+        detail_wrap.grid(row=2, column=0, sticky="nsew", pady=(8, 0))
+        detail_wrap.columnconfigure(0, weight=1)
+        detail_wrap.rowconfigure(0, weight=1)
+        self.table_detail_text = tk.Text(detail_wrap, wrap="word", height=8, state="disabled")
+        self.table_detail_text.grid(row=0, column=0, sticky="nsew")
+        detail_scroll = ttk.Scrollbar(detail_wrap, orient="vertical", command=self.table_detail_text.yview)
+        detail_scroll.grid(row=0, column=1, sticky="ns")
+        self.table_detail_text.configure(yscrollcommand=detail_scroll.set)
+        self._set_table_detail("选中上方任意一张工作表，可查看表头和合并单元格。")
+
+        return page
 
     def _results_tab(self, parent: ttk.Notebook) -> ttk.Frame:
         frame = ttk.Frame(parent, style="Card.TFrame", padding=(18, 16, 18, 16))
@@ -1224,6 +1332,67 @@ class OfficeToolGUI:
     def add_document_files(self) -> None:
         paths = filedialog.askopenfilenames(title="选择公文文件", filetypes=[("支持的文档", "*.doc *.docx *.txt *.md"), ("所有文件", "*.*")])
         self._add_document_paths(paths)
+
+    def add_table_files(self) -> None:
+        paths = filedialog.askopenfilenames(title="选择表格文件", filetypes=[("Excel 工作簿", "*.xlsx"), ("所有文件", "*.*")])
+        self._add_table_paths(paths)
+
+    def add_table_folder(self) -> None:
+        folder = filedialog.askdirectory(title="选择表格文件夹")
+        if folder:
+            self._add_table_paths([folder])
+
+    def _add_table_paths(self, paths) -> None:
+        for raw in paths:
+            path = Path(raw).resolve()
+            if path not in self.table_paths:
+                self.table_paths.append(path)
+                self.table_list.insert(tk.END, str(path))
+        self._refresh_table_placeholder()
+        if paths:
+            self.status_text.set(f"表格队列中 {len(self.table_paths)} 个路径")
+
+    def remove_selected_tables(self) -> None:
+        for index in reversed(list(self.table_list.curselection())):
+            self.table_list.delete(index)
+            del self.table_paths[index]
+        self._refresh_table_placeholder()
+        self.status_text.set(f"表格队列中 {len(self.table_paths)} 个路径")
+
+    def clear_tables(self) -> None:
+        self.table_list.delete(0, tk.END)
+        self.table_paths.clear()
+        self._clear_table_results()
+        self._refresh_table_placeholder()
+        self.status_text.set("表格队列已清空")
+
+    def _refresh_table_placeholder(self) -> None:
+        if self.table_list_placeholder is None:
+            return
+        if self.table_paths:
+            self.table_list_placeholder.place_forget()
+        else:
+            self.table_list_placeholder.place(relx=0.5, rely=0.5, anchor="center")
+
+    def inspect_tables(self) -> None:
+        try:
+            if not self.table_paths:
+                raise ValueError("请先添加 .xlsx 表格文件或文件夹。")
+            paths = list(self.table_paths)
+            self._clear_table_results()
+            self.status_text.set("正在检查表格...")
+
+            def work():
+                return TableWorkbookInspector().inspect_many(paths)
+
+            def done(report):
+                self._show_table_report(report)
+                self.status_text.set(report.summary())
+
+            self._run_background("表格检查", work, done)
+        except Exception as exc:
+            self.status_text.set("表格检查失败")
+            messagebox.showerror("表格检查失败", str(exc))
 
     def add_document_folder(self) -> None:
         folder = filedialog.askdirectory(title="选择文件夹")
@@ -1940,6 +2109,104 @@ class OfficeToolGUI:
             self.result_tree_placeholder.place_forget()
         else:
             self.result_tree_placeholder.place(relx=0.5, rely=0.5, anchor="center")
+
+    def _show_table_report(self, report) -> None:
+        self._clear_table_results()
+        for sheet in report.sheets:
+            merged = "、".join(sheet.merged_ranges[:3])
+            if len(sheet.merged_ranges) > 3:
+                merged += f" 等 {len(sheet.merged_ranges)} 项"
+            item_id = self.table_tree.insert(
+                "",
+                tk.END,
+                values=(
+                    Path(sheet.workbook).name,
+                    sheet.sheet,
+                    sheet.header_row,
+                    len(sheet.headers),
+                    merged or "无",
+                ),
+            )
+            self.table_details[item_id] = self._format_table_sheet_detail(sheet)
+
+        for finding in report.findings:
+            item_id = self.table_tree.insert(
+                "",
+                tk.END,
+                values=(
+                    Path(finding.workbook).name if finding.workbook else "",
+                    finding.sheet,
+                    finding.row or "",
+                    finding.column or "",
+                    finding.message,
+                ),
+            )
+            self.table_details[item_id] = self._format_table_finding_detail(finding)
+        self._refresh_table_tree_placeholder()
+
+    @staticmethod
+    def _format_table_sheet_detail(sheet) -> str:
+        parts = [
+            f"文件：{sheet.workbook}",
+            f"工作表：{sheet.sheet}",
+            f"数据范围：{sheet.max_row} 行 × {sheet.max_column} 列",
+            f"识别表头行：第 {sheet.header_row} 行",
+            "",
+            "列标题：",
+        ]
+        parts.extend(f"{index}. {header}" for index, header in enumerate(sheet.headers, start=1))
+        parts.extend(["", "合并单元格："])
+        if sheet.merged_ranges:
+            parts.extend(sheet.merged_ranges)
+        else:
+            parts.append("无")
+        return "\n".join(parts)
+
+    @staticmethod
+    def _format_table_finding_detail(finding) -> str:
+        parts = [
+            f"文件：{finding.workbook or '无'}",
+            f"工作表：{finding.sheet or '无'}",
+            f"级别：{finding.severity}",
+            f"编码：{finding.code}",
+        ]
+        if finding.row is not None:
+            parts.append(f"行：{finding.row}")
+        if finding.column is not None:
+            parts.append(f"列：{finding.column}")
+        parts.extend(["", "说明：", finding.message or "无"])
+        if finding.actual:
+            parts.extend(["", "实际内容：", finding.actual])
+        if finding.suggestion:
+            parts.extend(["", "处理建议：", finding.suggestion])
+        return "\n".join(parts)
+
+    def _show_selected_table_result(self, _event=None) -> None:
+        selection = self.table_tree.selection()
+        if not selection:
+            return
+        self._set_table_detail(self.table_details.get(selection[0], ""))
+
+    def _set_table_detail(self, text: str) -> None:
+        self.table_detail_text.configure(state="normal")
+        self.table_detail_text.delete("1.0", tk.END)
+        self.table_detail_text.insert(tk.END, text)
+        self.table_detail_text.configure(state="disabled")
+
+    def _clear_table_results(self) -> None:
+        for item in self.table_tree.get_children():
+            self.table_tree.delete(item)
+        self.table_details.clear()
+        self._set_table_detail("选中上方任意一张工作表，可查看表头和合并单元格。")
+        self._refresh_table_tree_placeholder()
+
+    def _refresh_table_tree_placeholder(self) -> None:
+        if self.table_tree_placeholder is None:
+            return
+        if self.table_tree.get_children():
+            self.table_tree_placeholder.place_forget()
+        else:
+            self.table_tree_placeholder.place(relx=0.5, rely=0.5, anchor="center")
 
 
 def main() -> int:

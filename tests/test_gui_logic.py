@@ -7,6 +7,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from office_tool.config import AIReviewOptions
 from office_tool.gui import OfficeToolGUI, _attached_popup_geometry, _default_gui_config, _profile_label
+from office_tool.table_models import SheetInfo
 
 
 class GuiLogicTests(unittest.TestCase):
@@ -59,6 +60,24 @@ class GuiLogicTests(unittest.TestCase):
         )
 
         self.assertEqual(geometry, (140, 300, 10, 398))
+
+    def test_table_sheet_detail_lists_headers_and_merged_ranges(self):
+        detail = OfficeToolGUI._format_table_sheet_detail(
+            SheetInfo(
+                workbook="sample.xlsx",
+                sheet="填报表",
+                max_row=8,
+                max_column=3,
+                header_row=2,
+                headers=["任务", "办理情况", "备注"],
+                merged_ranges=["A1:C1"],
+            )
+        )
+
+        self.assertIn("工作表：填报表", detail)
+        self.assertIn("识别表头行：第 2 行", detail)
+        self.assertIn("2. 办理情况", detail)
+        self.assertIn("A1:C1", detail)
 
 
 if __name__ == "__main__":
