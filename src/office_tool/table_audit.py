@@ -45,6 +45,26 @@ def collect_table_inputs(paths: Iterable[str | Path], recursive: bool = True) ->
     return inputs
 
 
+def inspect_workbook(path: str | Path) -> list[SheetInfo]:
+    source = Path(path).expanduser().resolve()
+    workbook = _load_workbook(source, data_only=False)
+    inspector = TableWorkbookInspector()
+    return [inspector.inspect_sheet(source, sheet) for sheet in workbook.worksheets]
+
+
+def read_sheet_preview(path: str | Path, sheet_name: str, max_rows: int = 80) -> tuple[list[str], list[list[str]]]:
+    workbook = _load_workbook(path, data_only=False)
+    if sheet_name not in workbook.sheetnames:
+        raise KeyError(f"工作表不存在: {sheet_name}")
+    sheet = workbook[sheet_name]
+    max_column = min(sheet.max_column, 50)
+    columns = [_column_label(index) for index in range(1, max_column + 1)]
+    rows: list[list[str]] = []
+    for row_index in range(1, min(sheet.max_row, max_rows) + 1):
+        rows.append([_clean_cell_value(sheet.cell(row_index, column).value) for column in range(1, max_column + 1)])
+    return columns, rows
+
+
 class TableWorkbookInspector:
     """Inspect xlsx workbooks without changing files."""
 
@@ -126,6 +146,14 @@ def _clean_cell_value(value) -> str:
     if value is None:
         return ""
     return str(value).strip()
+
+
+def _column_label(index: int) -> str:
+    result = ""
+    while index:
+        index, remainder = divmod(index - 1, 26)
+        result = chr(65 + remainder) + result
+    return result
 
 
 def _row_has_wide_merge(sheet: Worksheet, row_index: int) -> bool:

@@ -16,7 +16,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from .ai import DeepSeekTextReviewer
 from .config import AIReviewOptions, OfficeToolConfig
 from .services import audit_many, format_many, summarize_results
-from .table_audit import TableWorkbookInspector, collect_table_inputs
+from .table_audit import TableWorkbookInspector, collect_table_inputs, inspect_workbook, read_sheet_preview
 from .table_merge import merge_by_columns
 from .table_models import SourceColumnMapping, TableMergeOptions
 from .profile_store import ConfigProfileStore
@@ -366,6 +366,9 @@ class OfficeToolGUI:
         self.document_paths: list[Path] = []
         self.table_paths: list[Path] = []
         self.table_master_path: Path | None = None
+        self.table_selected_source_path: Path | None = None
+        self.table_workbook_infos: dict[Path, list] = {}
+        self.table_source_overrides: dict[Path, dict[str, str]] = {}
         self.direct_text: tk.Text | None = None
         self.doc_list_placeholder: tk.Label | None = None
         self.table_list_placeholder: tk.Label | None = None
@@ -380,6 +383,9 @@ class OfficeToolGUI:
         self.table_source_sheet = tk.StringVar()
         self.table_source_key_column = tk.StringVar(value="任务名称")
         self.table_source_value_column = tk.StringVar(value="回复内容")
+        self.table_selected_source_sheet = tk.StringVar()
+        self.table_selected_source_key_column = tk.StringVar()
+        self.table_selected_source_value_column = tk.StringVar()
         self.table_output_file = tk.StringVar()
         self.status_text = tk.StringVar(value="就绪")
         self.ai_enabled = tk.BooleanVar(value=False)
@@ -410,6 +416,15 @@ class OfficeToolGUI:
         self._apply_scheme_callback = lambda _name: None
         self.result_details: dict[str, str] = {}
         self.table_details: dict[str, str] = {}
+        self.table_master_sheet_box: ttk.Combobox | None = None
+        self.table_master_key_box: ttk.Combobox | None = None
+        self.table_master_target_box: ttk.Combobox | None = None
+        self.table_source_sheet_box: ttk.Combobox | None = None
+        self.table_source_key_box: ttk.Combobox | None = None
+        self.table_source_value_box: ttk.Combobox | None = None
+        self.table_selected_source_sheet_box: ttk.Combobox | None = None
+        self.table_selected_source_key_box: ttk.Combobox | None = None
+        self.table_selected_source_value_box: ttk.Combobox | None = None
 
         self._init_config_vars()
         self._load_ai_profiles()
@@ -721,42 +736,53 @@ class OfficeToolGUI:
 
         main = ttk.Frame(page, style="TFrame")
         main.grid(row=0, column=0, sticky="nsew")
-        main.columnconfigure(0, weight=5, uniform="table")
-        main.columnconfigure(1, weight=6, uniform="table")
+        main.columnconfigure(0, weight=4, uniform="table")
+        main.columnconfigure(1, weight=7, uniform="table")
         main.rowconfigure(0, weight=1)
 
         left = ttk.Frame(main, style="Card.TFrame", padding=(20, 18, 20, 18))
         left.grid(row=0, column=0, sticky="nsew", padx=(0, 16))
         left.columnconfigure(0, weight=1)
-        left.rowconfigure(3, weight=1)
+        left.rowconfigure(5, weight=1)
 
         ttk.Label(left, text="主表", style="Section.TLabel").grid(row=0, column=0, sticky="w")
         master = ttk.Frame(left, style="Card.TFrame")
-        master.grid(row=1, column=0, sticky="ew", pady=(8, 16))
+        master.grid(row=1, column=0, sticky="ew", pady=(8, 12))
         master.columnconfigure(1, weight=1)
-        ttk.Button(master, text="选择主表", style="Workbench.TButton", command=self.choose_table_master).grid(row=0, column=0, sticky="ew", padx=(0, 10))
-        ttk.Entry(master, textvariable=self.table_master_file).grid(row=0, column=1, sticky="ew")
+        master.columnconfigure(3, weight=1)
+        ttk.Button(master, text="选择主表", style="Workbench.TButton", command=self.choose_table_master).grid(row=0, column=0, sticky="ew", padx=(0, 10), pady=(0, 8))
+        ttk.Entry(master, textvariable=self.table_master_file).grid(row=0, column=1, columnspan=3, sticky="ew", pady=(0, 8))
+        ttk.Label(master, text="工作表", style="Card.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.table_master_sheet_box = ttk.Combobox(master, textvariable=self.table_master_sheet, state="readonly")
+        self.table_master_sheet_box.grid(row=1, column=1, sticky="ew", padx=(0, 10), pady=4)
+        ttk.Label(master, text="校验列", style="Card.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.table_master_key_box = ttk.Combobox(master, textvariable=self.table_master_key_column)
+        self.table_master_key_box.grid(row=2, column=1, sticky="ew", padx=(0, 10), pady=4)
+        ttk.Label(master, text="填入列", style="Card.TLabel").grid(row=2, column=2, sticky="w", padx=(0, 8), pady=4)
+        self.table_master_target_box = ttk.Combobox(master, textvariable=self.table_master_target_column)
+        self.table_master_target_box.grid(row=2, column=3, sticky="ew", pady=4)
+        if self.table_master_sheet_box is not None:
+            self.table_master_sheet_box.bind("<<ComboboxSelected>>", lambda _e: self._on_master_sheet_changed())
 
-        config = ttk.Frame(left, style="Tint.TFrame", padding=(14, 12))
-        config.grid(row=2, column=0, sticky="ew", pady=(0, 16))
-        for column in range(4):
-            config.columnconfigure(column, weight=1)
-        table_fields = [
-            ("主表工作表", self.table_master_sheet),
-            ("主表校验列", self.table_master_key_column),
-            ("主表填入列", self.table_master_target_column),
-            ("副表工作表", self.table_source_sheet),
-            ("副表校验列", self.table_source_key_column),
-            ("副表数据列", self.table_source_value_column),
-        ]
-        for index, (label, variable) in enumerate(table_fields):
-            row = index // 2
-            col = (index % 2) * 2
-            ttk.Label(config, text=label, style="TintMuted.TLabel").grid(row=row, column=col, sticky="w", padx=(0, 8), pady=5)
-            ttk.Entry(config, textvariable=variable).grid(row=row, column=col + 1, sticky="ew", padx=(0, 12), pady=5)
+        ttk.Label(left, text="副表默认规则", style="Section.TLabel").grid(row=2, column=0, sticky="w")
+        defaults = ttk.Frame(left, style="Tint.TFrame", padding=(14, 12))
+        defaults.grid(row=3, column=0, sticky="ew", pady=(8, 12))
+        for column in range(6):
+            defaults.columnconfigure(column, weight=1)
+        ttk.Label(defaults, text="工作表", style="TintMuted.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=5)
+        self.table_source_sheet_box = ttk.Combobox(defaults, textvariable=self.table_source_sheet)
+        self.table_source_sheet_box.grid(row=0, column=1, sticky="ew", padx=(0, 10), pady=5)
+        ttk.Label(defaults, text="校验列", style="TintMuted.TLabel").grid(row=0, column=2, sticky="w", padx=(0, 8), pady=5)
+        self.table_source_key_box = ttk.Combobox(defaults, textvariable=self.table_source_key_column)
+        self.table_source_key_box.grid(row=0, column=3, sticky="ew", padx=(0, 10), pady=5)
+        ttk.Label(defaults, text="数据列", style="TintMuted.TLabel").grid(row=0, column=4, sticky="w", padx=(0, 8), pady=5)
+        self.table_source_value_box = ttk.Combobox(defaults, textvariable=self.table_source_value_column)
+        self.table_source_value_box.grid(row=0, column=5, sticky="ew", pady=5)
+        if self.table_source_sheet_box is not None:
+            self.table_source_sheet_box.bind("<<ComboboxSelected>>", lambda _e: self._on_default_source_sheet_changed())
 
         list_wrap = ttk.Frame(left, style="Tint.TFrame", padding=1)
-        list_wrap.grid(row=3, column=0, sticky="nsew")
+        list_wrap.grid(row=5, column=0, sticky="nsew")
         list_wrap.columnconfigure(0, weight=1)
         list_wrap.rowconfigure(0, weight=1)
         self.table_list = tk.Listbox(list_wrap, activestyle="none", exportselection=False)
@@ -772,9 +798,29 @@ class OfficeToolGUI:
             font=(FONT_FAMILY, 9),
         )
         self.table_list_placeholder.place(relx=0.5, rely=0.5, anchor="center")
+        self.table_list.bind("<<ListboxSelect>>", self._on_table_source_selected)
+
+        selected = ttk.Frame(left, style="Card.TFrame")
+        selected.grid(row=6, column=0, sticky="ew", pady=(12, 0))
+        for column in range(6):
+            selected.columnconfigure(column, weight=1)
+        ttk.Label(selected, text="选中副表特殊规则", style="Card.TLabel").grid(row=0, column=0, columnspan=6, sticky="w", pady=(0, 6))
+        ttk.Label(selected, text="工作表", style="Card.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.table_selected_source_sheet_box = ttk.Combobox(selected, textvariable=self.table_selected_source_sheet)
+        self.table_selected_source_sheet_box.grid(row=1, column=1, sticky="ew", padx=(0, 10), pady=4)
+        ttk.Label(selected, text="校验列", style="Card.TLabel").grid(row=1, column=2, sticky="w", padx=(0, 8), pady=4)
+        self.table_selected_source_key_box = ttk.Combobox(selected, textvariable=self.table_selected_source_key_column)
+        self.table_selected_source_key_box.grid(row=1, column=3, sticky="ew", padx=(0, 10), pady=4)
+        ttk.Label(selected, text="数据列", style="Card.TLabel").grid(row=1, column=4, sticky="w", padx=(0, 8), pady=4)
+        self.table_selected_source_value_box = ttk.Combobox(selected, textvariable=self.table_selected_source_value_column)
+        self.table_selected_source_value_box.grid(row=1, column=5, sticky="ew", pady=4)
+        ttk.Button(selected, text="应用到选中副表", style="Secondary.TButton", command=self.apply_selected_source_mapping).grid(row=2, column=0, columnspan=3, sticky="ew", padx=(0, 8), pady=(8, 0))
+        ttk.Button(selected, text="使用默认规则", style="Subtle.TButton", command=self.clear_selected_source_mapping).grid(row=2, column=3, columnspan=3, sticky="ew", pady=(8, 0))
+        if self.table_selected_source_sheet_box is not None:
+            self.table_selected_source_sheet_box.bind("<<ComboboxSelected>>", lambda _e: self._on_selected_source_sheet_changed())
 
         source_tools = ttk.Frame(left, style="Toolbar.TFrame")
-        source_tools.grid(row=4, column=0, sticky="ew", pady=(12, 0))
+        source_tools.grid(row=7, column=0, sticky="ew", pady=(12, 0))
         for column in range(4):
             source_tools.columnconfigure(column, weight=1, uniform="source_tools")
         for index, (text, command) in enumerate([
@@ -791,13 +837,13 @@ class OfficeToolGUI:
             )
 
         output = ttk.Frame(left, style="Card.TFrame")
-        output.grid(row=5, column=0, sticky="ew", pady=(16, 0))
+        output.grid(row=8, column=0, sticky="ew", pady=(16, 0))
         output.columnconfigure(1, weight=1)
         ttk.Button(output, text="导出位置", style="Secondary.TButton", command=self.choose_table_output).grid(row=0, column=0, sticky="ew", padx=(0, 10))
         ttk.Entry(output, textvariable=self.table_output_file).grid(row=0, column=1, sticky="ew")
 
         actions = ttk.Frame(left, style="Card.TFrame")
-        actions.grid(row=6, column=0, sticky="ew", pady=(16, 0))
+        actions.grid(row=9, column=0, sticky="ew", pady=(16, 0))
         actions.columnconfigure(0, weight=1, uniform="table_actions")
         actions.columnconfigure(1, weight=1, uniform="table_actions")
         ttk.Button(actions, text="检查结构", style="Secondary.TButton", command=self.inspect_tables).grid(
@@ -811,43 +857,31 @@ class OfficeToolGUI:
         right.grid(row=0, column=1, sticky="nsew")
         right.columnconfigure(0, weight=1)
         right.rowconfigure(0, weight=1)
-        right.rowconfigure(2, weight=1)
+        right.rowconfigure(1, weight=1)
 
-        columns = ("file", "sheet", "header", "columns", "merged")
-        self.table_tree = ttk.Treeview(right, columns=columns, show="headings", height=11)
-        headings = {"file": "文件", "sheet": "工作表", "header": "表头行", "columns": "列数", "merged": "合并单元格"}
-        widths = {"file": 170, "sheet": 150, "header": 80, "columns": 70, "merged": 220}
-        for col in columns:
-            self.table_tree.heading(col, text=headings[col])
-            self.table_tree.column(col, width=widths[col], minwidth=60, stretch=col == "merged")
+        ttk.Label(right, text="表格预览", style="Section.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 8))
+        preview_wrap = ttk.Frame(right, style="Tint.TFrame", padding=1)
+        preview_wrap.grid(row=1, column=0, sticky="nsew")
+        preview_wrap.columnconfigure(0, weight=1)
+        preview_wrap.rowconfigure(0, weight=1)
+        self.table_tree = ttk.Treeview(preview_wrap, columns=("A",), show="headings", height=18)
+        self.table_tree.heading("A", text="A")
+        self.table_tree.column("A", width=160, minwidth=80, stretch=True)
         self.table_tree.grid(row=0, column=0, sticky="nsew")
-        tree_scroll = ttk.Scrollbar(right, orient="vertical", command=self.table_tree.yview)
+        tree_scroll = ttk.Scrollbar(preview_wrap, orient="vertical", command=self.table_tree.yview)
         tree_scroll.grid(row=0, column=1, sticky="ns")
+        tree_xscroll = ttk.Scrollbar(preview_wrap, orient="horizontal", command=self.table_tree.xview)
+        tree_xscroll.grid(row=1, column=0, sticky="ew")
         self.table_tree.configure(yscrollcommand=tree_scroll.set)
-        self.table_tree.bind("<<TreeviewSelect>>", self._show_selected_table_result)
+        self.table_tree.configure(xscrollcommand=tree_xscroll.set)
         self.table_tree_placeholder = tk.Label(
             self.table_tree,
-            text="检查结果将在这里显示",
+            text="选择主表或副表后，完整表格内容将在这里预览",
             bg=COLOR["white"],
             fg=COLOR["subtle"],
             font=(FONT_FAMILY, 9),
         )
         self.table_tree_placeholder.place(relx=0.5, rely=0.5, anchor="center")
-
-        footer = ttk.Frame(right, style="Card.TFrame")
-        footer.grid(row=1, column=0, sticky="ew", pady=(10, 0))
-        ttk.Label(footer, text="详情", style="ResultHint.TLabel").pack(anchor="w")
-
-        detail_wrap = ttk.Frame(right, style="Tint.TFrame", padding=1)
-        detail_wrap.grid(row=2, column=0, sticky="nsew", pady=(8, 0))
-        detail_wrap.columnconfigure(0, weight=1)
-        detail_wrap.rowconfigure(0, weight=1)
-        self.table_detail_text = tk.Text(detail_wrap, wrap="word", height=8, state="disabled")
-        self.table_detail_text.grid(row=0, column=0, sticky="nsew")
-        detail_scroll = ttk.Scrollbar(detail_wrap, orient="vertical", command=self.table_detail_text.yview)
-        detail_scroll.grid(row=0, column=1, sticky="ns")
-        self.table_detail_text.configure(yscrollcommand=detail_scroll.set)
-        self._set_table_detail("选择主表和副表后，可先检查结构，再按配置汇总导出。")
 
         status = ttk.Frame(page, style="Tint.TFrame", padding=(12, 8))
         status.grid(row=1, column=0, sticky="ew", pady=(14, 0))
@@ -1398,6 +1432,9 @@ class OfficeToolGUI:
         self.table_master_path = Path(path).resolve()
         self.table_master_file.set(str(self.table_master_path))
         self.table_output_file.set(str(self.table_master_path.with_name(f"{self.table_master_path.stem}_汇总结果.xlsx")))
+        self._load_table_workbook_info(self.table_master_path)
+        self._refresh_master_table_choices()
+        self._preview_table_path(self.table_master_path, self.table_master_sheet.get().strip() or None)
         self.status_text.set("已选择主表")
 
     def add_table_files(self) -> None:
@@ -1415,20 +1452,30 @@ class OfficeToolGUI:
             if path not in self.table_paths:
                 self.table_paths.append(path)
                 self.table_list.insert(tk.END, str(path))
+                self._load_table_workbook_info(path)
         self._refresh_table_placeholder()
+        self._refresh_default_source_choices()
         if paths:
             self.status_text.set(f"表格队列中 {len(self.table_paths)} 个路径")
 
     def remove_selected_tables(self) -> None:
         for index in reversed(list(self.table_list.curselection())):
+            path = self.table_paths[index]
             self.table_list.delete(index)
+            self.table_source_overrides.pop(path, None)
             del self.table_paths[index]
+        self.table_selected_source_path = None
+        self._clear_selected_source_form()
         self._refresh_table_placeholder()
+        self._refresh_default_source_choices()
         self.status_text.set(f"表格队列中 {len(self.table_paths)} 个路径")
 
     def clear_tables(self) -> None:
         self.table_list.delete(0, tk.END)
         self.table_paths.clear()
+        self.table_source_overrides.clear()
+        self.table_selected_source_path = None
+        self._clear_selected_source_form()
         self._clear_table_results()
         self._refresh_table_placeholder()
         self.status_text.set("表格队列已清空")
@@ -1454,6 +1501,26 @@ class OfficeToolGUI:
         )
         if path:
             self.table_output_file.set(str(Path(path).resolve()))
+
+    def apply_selected_source_mapping(self) -> None:
+        if self.table_selected_source_path is None:
+            messagebox.showwarning("副表配置", "请先在副表列表中选择一张表。")
+            return
+        self.table_source_overrides[self.table_selected_source_path] = {
+            "sheet": self.table_selected_source_sheet.get().strip(),
+            "key": self.table_selected_source_key_column.get().strip(),
+            "value": self.table_selected_source_value_column.get().strip(),
+        }
+        self._refresh_table_source_list_labels()
+        self.status_text.set("已为选中副表保存特殊规则")
+
+    def clear_selected_source_mapping(self) -> None:
+        if self.table_selected_source_path is None:
+            return
+        self.table_source_overrides.pop(self.table_selected_source_path, None)
+        self._load_selected_source_form(self.table_selected_source_path)
+        self._refresh_table_source_list_labels()
+        self.status_text.set("选中副表已改为使用默认规则")
 
     def inspect_tables(self) -> None:
         try:
@@ -1502,12 +1569,7 @@ class OfficeToolGUI:
 
             def work():
                 sources = [
-                    SourceColumnMapping(
-                        path=path,
-                        sheet=source_sheet or _first_sheet_name(path),
-                        key_column=source_key,
-                        value_column=source_value,
-                    )
+                    self._source_mapping_for_path(path, source_sheet, source_key, source_value)
                     for path in source_paths
                 ]
                 return merge_by_columns(
@@ -1524,7 +1586,6 @@ class OfficeToolGUI:
             def done(report):
                 self._show_table_report(report)
                 self.status_text.set(f"{report.summary()} 输出：{output_path}")
-                self._set_table_detail(self._format_table_merge_summary(report, output_path))
 
             self._run_background("表格汇总", work, done)
         except Exception as exc:
@@ -1559,6 +1620,143 @@ class OfficeToolGUI:
         output = Path(raw).expanduser().resolve() if raw else master_path.with_name(f"{master_path.stem}_汇总结果.xlsx")
         self.table_output_file.set(str(output))
         return output
+
+    def _load_table_workbook_info(self, path: Path) -> None:
+        self.table_workbook_infos[path.resolve()] = inspect_workbook(path)
+
+    def _refresh_master_table_choices(self) -> None:
+        if self.table_master_path is None:
+            return
+        infos = self.table_workbook_infos.get(self.table_master_path.resolve()) or []
+        sheet_names = [info.sheet for info in infos]
+        if self.table_master_sheet_box is not None:
+            self.table_master_sheet_box.configure(values=sheet_names)
+        if sheet_names and self.table_master_sheet.get() not in sheet_names:
+            self.table_master_sheet.set(sheet_names[0])
+        self._refresh_master_header_choices()
+
+    def _refresh_master_header_choices(self) -> None:
+        headers = self._headers_for_path_sheet(self.table_master_path, self.table_master_sheet.get())
+        for box in [self.table_master_key_box, self.table_master_target_box]:
+            if box is not None:
+                box.configure(values=headers)
+        self._prefer_existing_or_first(self.table_master_key_column, headers, ["任务详情", "任务名称", "任务"])
+        self._prefer_existing_or_first(self.table_master_target_column, headers, ["任务回复", "办理情况", "回复"])
+
+    def _refresh_default_source_choices(self) -> None:
+        sheet_names: list[str] = []
+        headers: list[str] = []
+        for path in self.table_paths:
+            infos = self.table_workbook_infos.get(path.resolve()) or []
+            for info in infos:
+                if info.sheet not in sheet_names:
+                    sheet_names.append(info.sheet)
+                for header in info.headers:
+                    if header not in headers:
+                        headers.append(header)
+        for box in [self.table_source_sheet_box]:
+            if box is not None:
+                box.configure(values=sheet_names)
+        for box in [self.table_source_key_box, self.table_source_value_box]:
+            if box is not None:
+                box.configure(values=headers)
+        if sheet_names and self.table_source_sheet.get() not in sheet_names:
+            self.table_source_sheet.set(sheet_names[0])
+        self._prefer_existing_or_first(self.table_source_key_column, headers, ["任务详情", "下达任务", "任务名称", "任务"])
+        self._prefer_existing_or_first(self.table_source_value_column, headers, ["任务回复", "落实", "回复内容", "回复"])
+
+    def _on_master_sheet_changed(self) -> None:
+        self._refresh_master_header_choices()
+        if self.table_master_path is not None:
+            self._preview_table_path(self.table_master_path, self.table_master_sheet.get())
+
+    def _on_default_source_sheet_changed(self) -> None:
+        headers: list[str] = []
+        for path in self.table_paths:
+            headers.extend(header for header in self._headers_for_path_sheet(path, self.table_source_sheet.get()) if header not in headers)
+        for box in [self.table_source_key_box, self.table_source_value_box]:
+            if box is not None:
+                box.configure(values=headers)
+        self._prefer_existing_or_first(self.table_source_key_column, headers, ["任务详情", "下达任务", "任务名称", "任务"])
+        self._prefer_existing_or_first(self.table_source_value_column, headers, ["任务回复", "落实", "回复内容", "回复"])
+
+    def _on_selected_source_sheet_changed(self) -> None:
+        if self.table_selected_source_path is None:
+            return
+        headers = self._headers_for_path_sheet(self.table_selected_source_path, self.table_selected_source_sheet.get())
+        for box in [self.table_selected_source_key_box, self.table_selected_source_value_box]:
+            if box is not None:
+                box.configure(values=headers)
+        self._prefer_existing_or_first(self.table_selected_source_key_column, headers, ["任务详情", "下达任务", "任务名称", "任务"])
+        self._prefer_existing_or_first(self.table_selected_source_value_column, headers, ["任务回复", "落实", "回复内容", "回复"])
+        self._preview_table_path(self.table_selected_source_path, self.table_selected_source_sheet.get())
+
+    def _on_table_source_selected(self, _event=None) -> None:
+        selection = self.table_list.curselection()
+        if not selection:
+            return
+        path = self.table_paths[selection[0]]
+        self.table_selected_source_path = path
+        self._load_selected_source_form(path)
+        self._preview_table_path(path, self.table_selected_source_sheet.get().strip() or None)
+
+    def _load_selected_source_form(self, path: Path) -> None:
+        override = self.table_source_overrides.get(path, {})
+        infos = self.table_workbook_infos.get(path.resolve()) or []
+        sheets = [info.sheet for info in infos]
+        sheet = override.get("sheet") or self.table_source_sheet.get().strip() or (sheets[0] if sheets else "")
+        self.table_selected_source_sheet.set(sheet)
+        headers = self._headers_for_path_sheet(path, sheet)
+        self.table_selected_source_key_column.set(override.get("key") or self.table_source_key_column.get())
+        self.table_selected_source_value_column.set(override.get("value") or self.table_source_value_column.get())
+        if self.table_selected_source_sheet_box is not None:
+            self.table_selected_source_sheet_box.configure(values=sheets)
+        for box in [self.table_selected_source_key_box, self.table_selected_source_value_box]:
+            if box is not None:
+                box.configure(values=headers)
+
+    def _clear_selected_source_form(self) -> None:
+        self.table_selected_source_sheet.set("")
+        self.table_selected_source_key_column.set("")
+        self.table_selected_source_value_column.set("")
+        for box in [self.table_selected_source_sheet_box, self.table_selected_source_key_box, self.table_selected_source_value_box]:
+            if box is not None:
+                box.configure(values=[])
+
+    def _source_mapping_for_path(self, path: Path, default_sheet: str, default_key: str, default_value: str) -> SourceColumnMapping:
+        override = self.table_source_overrides.get(path, {})
+        sheet = override.get("sheet") or default_sheet or _first_sheet_name(path)
+        key = override.get("key") or default_key
+        value = override.get("value") or default_value
+        if not key or not value:
+            raise ValueError(f"请为副表配置校验列和数据列: {path.name}")
+        return SourceColumnMapping(path=path, sheet=sheet, key_column=key, value_column=value)
+
+    def _headers_for_path_sheet(self, path: Path | None, sheet_name: str) -> list[str]:
+        if path is None or not sheet_name:
+            return []
+        for info in self.table_workbook_infos.get(path.resolve(), []):
+            if info.sheet == sheet_name:
+                return list(info.headers)
+        return []
+
+    @staticmethod
+    def _prefer_existing_or_first(variable: tk.StringVar, choices: list[str], preferred: list[str]) -> None:
+        if not choices:
+            return
+        if variable.get() in choices:
+            return
+        for item in preferred:
+            if item in choices:
+                variable.set(item)
+                return
+        variable.set(choices[0])
+
+    def _refresh_table_source_list_labels(self) -> None:
+        self.table_list.delete(0, tk.END)
+        for path in self.table_paths:
+            prefix = "★ " if path in self.table_source_overrides else ""
+            self.table_list.insert(tk.END, prefix + str(path))
 
     def add_document_folder(self) -> None:
         folder = filedialog.askdirectory(title="选择文件夹")
@@ -2278,36 +2476,35 @@ class OfficeToolGUI:
 
     def _show_table_report(self, report) -> None:
         self._clear_table_results()
+        self._configure_table_preview(["类型", "文件", "工作表", "位置", "内容"])
         for sheet in report.sheets:
             merged = "、".join(sheet.merged_ranges[:3])
             if len(sheet.merged_ranges) > 3:
                 merged += f" 等 {len(sheet.merged_ranges)} 项"
-            item_id = self.table_tree.insert(
+            self.table_tree.insert(
                 "",
                 tk.END,
                 values=(
+                    "结构",
                     Path(sheet.workbook).name,
                     sheet.sheet,
-                    sheet.header_row,
-                    len(sheet.headers),
-                    merged or "无",
+                    f"表头第 {sheet.header_row} 行",
+                    f"{len(sheet.headers)} 列；合并单元格：{merged or '无'}",
                 ),
             )
-            self.table_details[item_id] = self._format_table_sheet_detail(sheet)
 
         for finding in report.findings:
-            item_id = self.table_tree.insert(
+            self.table_tree.insert(
                 "",
                 tk.END,
                 values=(
+                    finding.severity,
                     Path(finding.workbook).name if finding.workbook else "",
                     finding.sheet,
-                    finding.row or "",
-                    finding.column or "",
-                    finding.message,
+                    self._table_finding_location(finding),
+                    finding.message if not finding.actual else f"{finding.message}：{finding.actual}",
                 ),
             )
-            self.table_details[item_id] = self._format_table_finding_detail(finding)
         self._refresh_table_tree_placeholder()
 
     @staticmethod
@@ -2329,23 +2526,13 @@ class OfficeToolGUI:
         return "\n".join(parts)
 
     @staticmethod
-    def _format_table_finding_detail(finding) -> str:
-        parts = [
-            f"文件：{finding.workbook or '无'}",
-            f"工作表：{finding.sheet or '无'}",
-            f"级别：{finding.severity}",
-            f"编码：{finding.code}",
-        ]
+    def _table_finding_location(finding) -> str:
+        parts = []
         if finding.row is not None:
-            parts.append(f"行：{finding.row}")
+            parts.append(f"第 {finding.row} 行")
         if finding.column is not None:
-            parts.append(f"列：{finding.column}")
-        parts.extend(["", "说明：", finding.message or "无"])
-        if finding.actual:
-            parts.extend(["", "实际内容：", finding.actual])
-        if finding.suggestion:
-            parts.extend(["", "处理建议：", finding.suggestion])
-        return "\n".join(parts)
+            parts.append(f"第 {finding.column} 列")
+        return "，".join(parts)
 
     @staticmethod
     def _format_table_merge_summary(report, output_path: Path) -> str:
@@ -2371,23 +2558,10 @@ class OfficeToolGUI:
             parts.append("无")
         return "\n".join(parts)
 
-    def _show_selected_table_result(self, _event=None) -> None:
-        selection = self.table_tree.selection()
-        if not selection:
-            return
-        self._set_table_detail(self.table_details.get(selection[0], ""))
-
-    def _set_table_detail(self, text: str) -> None:
-        self.table_detail_text.configure(state="normal")
-        self.table_detail_text.delete("1.0", tk.END)
-        self.table_detail_text.insert(tk.END, text)
-        self.table_detail_text.configure(state="disabled")
-
     def _clear_table_results(self) -> None:
         for item in self.table_tree.get_children():
             self.table_tree.delete(item)
         self.table_details.clear()
-        self._set_table_detail("选中上方任意一张工作表，可查看表头和合并单元格。")
         self._refresh_table_tree_placeholder()
 
     def _refresh_table_tree_placeholder(self) -> None:
@@ -2397,6 +2571,30 @@ class OfficeToolGUI:
             self.table_tree_placeholder.place_forget()
         else:
             self.table_tree_placeholder.place(relx=0.5, rely=0.5, anchor="center")
+
+    def _configure_table_preview(self, columns: list[str]) -> None:
+        keys = [f"c{index}" for index in range(len(columns))]
+        self.table_tree.configure(columns=keys, show="headings")
+        for key, label in zip(keys, columns):
+            self.table_tree.heading(key, text=label)
+            self.table_tree.column(key, width=max(90, min(220, len(label) * 18)), minwidth=70, stretch=True)
+
+    def _preview_table_path(self, path: Path, sheet_name: str | None = None) -> None:
+        try:
+            if path.resolve() not in self.table_workbook_infos:
+                self._load_table_workbook_info(path)
+            infos = self.table_workbook_infos.get(path.resolve()) or []
+            sheet = sheet_name or (infos[0].sheet if infos else _first_sheet_name(path))
+            columns, rows = read_sheet_preview(path, sheet)
+            self._clear_table_results()
+            self._configure_table_preview(["行号", *columns])
+            for index, row_values in enumerate(rows, start=1):
+                self.table_tree.insert("", tk.END, values=[index, *row_values])
+            self._refresh_table_tree_placeholder()
+            self.status_text.set(f"正在预览：{path.name} / {sheet}")
+        except Exception as exc:
+            self.status_text.set("表格预览失败")
+            messagebox.showerror("表格预览失败", str(exc))
 
 
 def main() -> int:
