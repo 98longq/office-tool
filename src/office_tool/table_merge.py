@@ -245,8 +245,12 @@ def merge_same_layout(
     report.stats["sources"] = len(source_paths)
     report.stats["updated_cells"] = 0
     report.stats["appended_values"] = 0
+    report.stats["skipped_formula_cells"] = 0
+    report.stats["layout_warnings"] = 0
     header_row = detect_header_row(master_ws)
-    report.sheets.append(_sheet_info(str(master_path), master_ws, header_row, headers_for_row(master_ws, header_row)))
+    master_headers = headers_for_row(master_ws, header_row)
+    master_merged_ranges = _merged_range_texts(master_ws)
+    report.sheets.append(_sheet_info(str(master_path), master_ws, header_row, master_headers))
 
     for raw_source in source_paths:
         source_path = Path(raw_source).expanduser().resolve()
@@ -267,25 +271,141 @@ def merge_same_layout(
         else:
             sheet = workbook.worksheets[0]
         source_header_row = detect_header_row(sheet)
-        report.sheets.append(_sheet_info(str(source_path), sheet, source_header_row, headers_for_row(sheet, source_header_row)))
+        source_headers = headers_for_row(sheet, source_header_row)
+        report.sheets.append(_sheet_info(str(source_path), sheet, source_header_row, source_headers))
+        _warn_same_layout_mismatches(
+            report,
+            master_ws=master_ws,
+            source_ws=sheet,
+            source_path=source_path,
+            master_header_row=header_row,
+            source_header_row=source_header_row,
+            master_headers=master_headers,
+            source_headers=source_headers,
+            master_merged_ranges=master_merged_ranges,
+        )
         max_row = min(master_ws.max_row, sheet.max_row)
         max_col = min(master_ws.max_column, sheet.max_column)
+        source_values_seen = 0
         for row in range(1, max_row + 1):
             for column in range(1, max_col + 1):
-                value = normalized_cell_text(sheet.cell(row, column).value, normalize=False)
+                source_cell = sheet.cell(row, column)
+                value = normalized_cell_text(source_cell.value, normalize=False)
                 if not value:
                     continue
+                source_values_seen += 1
+                if row <= header_row:
+                    continue
+                if source_cell.data_type == "f":
+                    report.stats["skipped_formula_cells"] += 1
+                    continue
                 target_cell = master_ws.cell(row, column)
+                if target_cell.data_type == "f":
+                    report.stats["skipped_formula_cells"] += 1
+                    continue
                 existing = split_cell_values(target_cell.value, separator)
                 if value in existing:
+                    continue
+                if existing and not _looks_like_aggregate_cell(target_cell.value, separator) and not _is_fillable_same_layout_column(master_headers, column):
+                    report.add_finding(
+                        "protected_template_cell",
+                        "warning",
+                        "主表该单元格已有模板内容，已跳过副表差异值。",
+                        workbook=master_path,
+                        sheet=master_ws.title,
+                        row=row,
+                        column=column,
+                        actual=target_cell.value or "",
+                        suggestion="如该列确实需要汇总，请使用按列汇总并指定填入列。",
+                    )
                     continue
                 target_cell.value = separator.join(existing + [value]) if existing else value
                 report.stats["updated_cells"] += 1
                 report.stats["appended_values"] += 1
+        if source_values_seen == 0:
+            report.add_finding(
+                "empty_source_sheet",
+                "info",
+                "副表工作表为空，已跳过。",
+                workbook=source_path,
+                sheet=sheet.title,
+            )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     master_wb.save(output_path)
     return report
+
+
+def _warn_same_layout_mismatches(
+    report: TableReport,
+    *,
+    master_ws: "Worksheet",
+    source_ws: "Worksheet",
+    source_path: Path,
+    master_header_row: int,
+    source_header_row: int,
+    master_headers: list[str],
+    source_headers: list[str],
+    master_merged_ranges: set[str],
+) -> None:
+    if master_header_row != source_header_row:
+        _add_layout_warning(
+            report,
+            source_path,
+            source_ws.title,
+            f"副表表头行与主表不一致：主表第 {master_header_row} 行，副表第 {source_header_row} 行。",
+        )
+    if _compact_headers(master_headers) != _compact_headers(source_headers):
+        _add_layout_warning(report, source_path, source_ws.title, "副表表头与主表不完全一致，已按交叉区域谨慎汇总。")
+    if _merged_range_texts(source_ws) != master_merged_ranges:
+        _add_layout_warning(report, source_path, source_ws.title, "副表合并单元格结构与主表不完全一致。")
+    if source_ws.max_row != master_ws.max_row or source_ws.max_column != master_ws.max_column:
+        _add_layout_warning(
+            report,
+            source_path,
+            source_ws.title,
+            f"副表尺寸与主表不一致：主表 {master_ws.max_row} 行×{master_ws.max_column} 列，副表 {source_ws.max_row} 行×{source_ws.max_column} 列。",
+        )
+
+
+def _add_layout_warning(report: TableReport, workbook: Path, sheet: str, message: str) -> None:
+    report.stats["layout_warnings"] = int(report.stats.get("layout_warnings", 0)) + 1
+    report.add_finding(
+        "layout_mismatch",
+        "warning",
+        message,
+        workbook=workbook,
+        sheet=sheet,
+        suggestion="建议先预览结果；如果模板差异较大，请改用按列汇总。",
+    )
+
+
+def _compact_headers(headers: list[str]) -> list[str]:
+    return [normalized_cell_text(header) for header in headers if normalized_cell_text(header)]
+
+
+def _merged_range_texts(sheet: "Worksheet") -> set[str]:
+    return {str(item) for item in sheet.merged_cells.ranges}
+
+
+def _looks_like_aggregate_cell(value, separator: str) -> bool:
+    text = "" if value is None else str(value)
+    return separator in text
+
+
+def _is_fillable_same_layout_column(headers: list[str], column: int) -> bool:
+    if column < 1 or column > len(headers):
+        return False
+    header = normalized_cell_text(headers[column - 1])
+    if not header:
+        return False
+    protected_words = ("序号", "编号", "任务", "事项", "名称", "标题", "部门", "单位")
+    fillable_words = ("回复", "反馈", "落实", "办理", "情况", "进展", "结果", "备注", "意见", "说明", "内容")
+    if any(word in header for word in fillable_words):
+        return True
+    if any(word in header for word in protected_words):
+        return False
+    return False
 
 
 def resolve_column(sheet: "Worksheet", header_row: int, column: str | int) -> int:

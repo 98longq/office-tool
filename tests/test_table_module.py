@@ -249,6 +249,59 @@ class TableModuleTests(unittest.TestCase):
         self.assertEqual(sheet["C3"].value, "推进中")
         self.assertEqual(report.stats["updated_cells"], 4)
 
+    def test_merge_same_layout_protects_template_cells_and_appends_fillable_columns(self):
+        with tempfile.TemporaryDirectory(prefix="office_tool_table_same_layout_safe_") as tmp:
+            root = Path(tmp)
+            master = root / "master.xlsx"
+            source = root / "source.xlsx"
+            output = root / "merged.xlsx"
+
+            master_wb = Workbook()
+            master_ws = master_wb.active
+            master_ws.title = "总表"
+            master_ws.append(["任务", "办理情况"])
+            master_ws.append(["任务一", "已收到"])
+            master_wb.save(master)
+
+            source_wb = Workbook()
+            source_ws = source_wb.active
+            source_ws.append(["任务", "办理情况"])
+            source_ws.append(["任务一改动", "正在推进"])
+            source_wb.save(source)
+
+            report = merge_same_layout(master, [source], output)
+            merged = load_workbook(output)
+            sheet = merged["总表"]
+
+        self.assertEqual(sheet["A2"].value, "任务一")
+        self.assertEqual(sheet["B2"].value, "已收到\n正在推进")
+        self.assertIn("protected_template_cell", {finding.code for finding in report.findings})
+
+    def test_merge_same_layout_warns_on_layout_mismatch(self):
+        with tempfile.TemporaryDirectory(prefix="office_tool_table_same_layout_mismatch_") as tmp:
+            root = Path(tmp)
+            master = root / "master.xlsx"
+            source = root / "source.xlsx"
+            output = root / "merged.xlsx"
+
+            master_wb = Workbook()
+            master_ws = master_wb.active
+            master_ws.title = "总表"
+            master_ws.append(["任务", "办理情况"])
+            master_ws.append(["任务一", ""])
+            master_wb.save(master)
+
+            source_wb = Workbook()
+            source_ws = source_wb.active
+            source_ws.append(["任务", "备注", "办理情况"])
+            source_ws.append(["任务一", "", "已完成"])
+            source_wb.save(source)
+
+            report = merge_same_layout(master, [source], output)
+
+        self.assertGreaterEqual(report.stats["layout_warnings"], 1)
+        self.assertIn("layout_mismatch", {finding.code for finding in report.findings})
+
     def test_collect_table_inputs_skips_temporary_files(self):
         with tempfile.TemporaryDirectory(prefix="office_tool_table_collect_") as tmp:
             root = Path(tmp)
