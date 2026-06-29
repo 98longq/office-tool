@@ -790,122 +790,84 @@ class OfficeToolGUI:
             source_tools.columnconfigure(column, weight=1, uniform="source_tools")
         for index, (text, command) in enumerate([
             ("导入表格", self.add_table_files),
-            ("导出表格", self.merge_same_layout_tables),
-            ("删除选中", self.remove_selected_tables),
             ("清空列表", self.clear_tables),
         ]):
             ttk.Button(source_tools, text=text, style="Workbench.TButton", command=command).grid(
-                row=index // 2,
-                column=index % 2,
+                row=0,
+                column=index,
                 sticky="ew",
                 padx=(0, 6) if index % 2 == 0 else (6, 0),
-                pady=(0, 6) if index < 2 else (0, 0),
             )
 
         rules_panel = ttk.Frame(main, style="Card.TFrame", padding=(18, 16, 18, 16))
         rules_panel.grid(row=0, column=1, sticky="nsew", padx=(0, 12))
         rules_panel.columnconfigure(0, weight=1)
-        rules_panel.rowconfigure(3, weight=1)
+        rules_panel.rowconfigure(2, weight=1)
         ttk.Label(rules_panel, text="汇总设置", style="Section.TLabel").grid(row=0, column=0, sticky="w")
 
         role = ttk.Frame(rules_panel, style="Tint.TFrame", padding=(12, 10))
         role.grid(row=1, column=0, sticky="ew", pady=(10, 12))
-        role.columnconfigure(1, weight=1)
-        ttk.Button(role, text="选中作为主表", style="Primary.TButton", command=self.use_selected_table_as_master).grid(row=0, column=0, sticky="ew", padx=(0, 8), pady=(0, 8))
-        ttk.Entry(role, textvariable=self.table_master_file, state="readonly").grid(row=0, column=1, sticky="ew", pady=(0, 8))
-        ttk.Button(role, text="另选主表", style="Secondary.TButton", command=self.choose_table_master).grid(row=1, column=0, sticky="ew", padx=(0, 8))
-        ttk.Label(role, text="副表：左侧列表中除主表外的表格", style="TintMuted.TLabel").grid(row=1, column=1, sticky="w")
+        for column in range(2):
+            role.columnconfigure(column, weight=1, uniform="table_top_actions")
+        ttk.Button(role, text="设为主表", style="Secondary.TButton", command=self.use_selected_table_as_master).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        ttk.Button(role, text="一键汇总", style="Secondary.TButton", command=self.merge_same_layout_tables).grid(row=0, column=1, sticky="ew", padx=(6, 0))
 
-        quick = ttk.Frame(rules_panel, style="Tint.TFrame", padding=(12, 10))
-        quick.grid(row=2, column=0, sticky="ew", pady=(0, 12))
-        quick.columnconfigure(0, weight=1)
-        ttk.Button(quick, text="一键同格式汇总", style="Primary.TButton", command=self.merge_same_layout_tables).grid(row=0, column=0, sticky="ew", pady=(0, 8))
-        ttk.Button(quick, textvariable=self.table_advanced_button_text, style="Subtle.TButton", command=self.toggle_table_advanced).grid(row=1, column=0, sticky="ew")
+        settings = ttk.Frame(rules_panel, style="Tint.TFrame", padding=(1, 1))
+        settings.grid(row=2, column=0, sticky="nsew")
+        settings.columnconfigure(0, weight=1)
+        settings.rowconfigure(1, weight=1)
 
-        self.table_advanced_frame = ttk.Frame(rules_panel, style="Card.TFrame")
-        self.table_advanced_frame.grid(row=3, column=0, sticky="nsew")
-        self.table_advanced_frame.columnconfigure(0, weight=1)
-        self.table_advanced_frame.rowconfigure(3, weight=1)
-        self.table_advanced_frame.grid_remove()
+        editor = ttk.Frame(settings, style="Card.TFrame", padding=(10, 8))
+        editor.grid(row=0, column=0, sticky="ew")
+        for column in range(3):
+            editor.columnconfigure(column, weight=1, uniform="table_editor")
+        self.table_selected_source_sheet_box = ttk.Combobox(editor, textvariable=self.table_selected_source_sheet)
+        self.table_selected_source_sheet_box.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        self.table_selected_source_key_box = ttk.Combobox(editor, textvariable=self.table_selected_source_key_column)
+        self.table_selected_source_key_box.grid(row=0, column=1, sticky="ew", padx=(0, 8))
+        self.table_selected_source_value_box = ttk.Combobox(editor, textvariable=self.table_selected_source_value_column)
+        self.table_selected_source_value_box.grid(row=0, column=2, sticky="ew")
+        for box in [self.table_selected_source_sheet_box, self.table_selected_source_key_box, self.table_selected_source_value_box]:
+            box.bind("<<ComboboxSelected>>", lambda _e: self._on_selected_table_setting_changed())
+            box.bind("<FocusOut>", lambda _e: self._save_selected_table_settings(silent=True))
 
-        master_rules = ttk.Frame(self.table_advanced_frame, style="Tint.TFrame", padding=(12, 10))
-        master_rules.grid(row=0, column=0, sticky="ew", pady=(0, 12))
-        master_rules.columnconfigure(1, weight=1)
-        master_rules.columnconfigure(3, weight=1)
-        ttk.Label(master_rules, text="主表工作表", style="TintMuted.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
-        self.table_master_sheet_box = ttk.Combobox(master_rules, textvariable=self.table_master_sheet, state="readonly")
-        self.table_master_sheet_box.grid(row=0, column=1, columnspan=3, sticky="ew", pady=4)
-        ttk.Label(master_rules, text="匹配列", style="TintMuted.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
-        self.table_master_key_box = ttk.Combobox(master_rules, textvariable=self.table_master_key_column)
-        self.table_master_key_box.grid(row=1, column=1, sticky="ew", padx=(0, 10), pady=4)
-        ttk.Label(master_rules, text="填入列", style="TintMuted.TLabel").grid(row=1, column=2, sticky="w", padx=(0, 8), pady=4)
-        self.table_master_target_box = ttk.Combobox(master_rules, textvariable=self.table_master_target_column)
-        self.table_master_target_box.grid(row=1, column=3, sticky="ew", pady=4)
-        self.table_master_sheet_box.bind("<<ComboboxSelected>>", lambda _e: self._on_master_sheet_changed())
-
-        default_rules = ttk.Frame(self.table_advanced_frame, style="Tint.TFrame", padding=(12, 10))
-        default_rules.grid(row=1, column=0, sticky="ew", pady=(0, 12))
-        default_rules.columnconfigure(1, weight=1)
-        default_rules.columnconfigure(3, weight=1)
-        ttk.Label(default_rules, text="副表默认工作表", style="TintMuted.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
-        self.table_source_sheet_box = ttk.Combobox(default_rules, textvariable=self.table_source_sheet)
-        self.table_source_sheet_box.grid(row=0, column=1, columnspan=3, sticky="ew", pady=4)
-        ttk.Label(default_rules, text="匹配列", style="TintMuted.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
-        self.table_source_key_box = ttk.Combobox(default_rules, textvariable=self.table_source_key_column)
-        self.table_source_key_box.grid(row=1, column=1, sticky="ew", padx=(0, 10), pady=4)
-        ttk.Label(default_rules, text="取值列", style="TintMuted.TLabel").grid(row=1, column=2, sticky="w", padx=(0, 8), pady=4)
-        self.table_source_value_box = ttk.Combobox(default_rules, textvariable=self.table_source_value_column)
-        self.table_source_value_box.grid(row=1, column=3, sticky="ew", pady=4)
-        self.table_source_sheet_box.bind("<<ComboboxSelected>>", lambda _e: self._on_default_source_sheet_changed())
-
-        selected = ttk.Frame(self.table_advanced_frame, style="Card.TFrame")
-        selected.grid(row=2, column=0, sticky="ew", pady=(0, 12))
-        for column in range(6):
-            selected.columnconfigure(column, weight=1)
-        ttk.Label(selected, text="选中副表特殊规则", style="Section.TLabel").grid(row=0, column=0, columnspan=6, sticky="w", pady=(0, 6))
-        ttk.Label(selected, text="工作表", style="Card.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
-        self.table_selected_source_sheet_box = ttk.Combobox(selected, textvariable=self.table_selected_source_sheet)
-        self.table_selected_source_sheet_box.grid(row=1, column=1, sticky="ew", padx=(0, 10), pady=4)
-        ttk.Label(selected, text="校验列", style="Card.TLabel").grid(row=1, column=2, sticky="w", padx=(0, 8), pady=4)
-        self.table_selected_source_key_box = ttk.Combobox(selected, textvariable=self.table_selected_source_key_column)
-        self.table_selected_source_key_box.grid(row=1, column=3, sticky="ew", padx=(0, 10), pady=4)
-        ttk.Label(selected, text="数据列", style="Card.TLabel").grid(row=1, column=4, sticky="w", padx=(0, 8), pady=4)
-        self.table_selected_source_value_box = ttk.Combobox(selected, textvariable=self.table_selected_source_value_column)
-        self.table_selected_source_value_box.grid(row=1, column=5, sticky="ew", pady=4)
-        ttk.Button(selected, text="应用到选中副表", style="Secondary.TButton", command=self.apply_selected_source_mapping).grid(row=2, column=0, columnspan=3, sticky="ew", padx=(0, 8), pady=(8, 0))
-        ttk.Button(selected, text="使用默认规则", style="Subtle.TButton", command=self.clear_selected_source_mapping).grid(row=2, column=3, columnspan=3, sticky="ew", pady=(8, 0))
-        if self.table_selected_source_sheet_box is not None:
-            self.table_selected_source_sheet_box.bind("<<ComboboxSelected>>", lambda _e: self._on_selected_source_sheet_changed())
-
-        special = ttk.Frame(self.table_advanced_frame, style="Tint.TFrame", padding=1)
-        special.grid(row=3, column=0, sticky="nsew")
-        special.columnconfigure(0, weight=1)
-        special.rowconfigure(0, weight=1)
         self.table_rules_tree = ttk.Treeview(
-            special,
-            columns=("file", "sheet", "key", "value"),
+            settings,
+            columns=("role", "file", "sheet", "key", "value"),
             show="headings",
-            height=6,
+            height=9,
         )
         for col, label, width in [
-            ("file", "特殊副表", 150),
+            ("role", "类型", 54),
+            ("file", "文件", 130),
             ("sheet", "工作表", 90),
             ("key", "匹配列", 90),
             ("value", "取值列", 90),
         ]:
             self.table_rules_tree.heading(col, text=label)
-            self.table_rules_tree.column(col, width=width, minwidth=70, stretch=True)
-        self.table_rules_tree.grid(row=0, column=0, sticky="nsew")
-        rules_scroll = ttk.Scrollbar(special, orient="vertical", command=self.table_rules_tree.yview)
-        rules_scroll.grid(row=0, column=1, sticky="ns")
+            self.table_rules_tree.column(col, width=width, minwidth=50, stretch=True)
+        self.table_rules_tree.grid(row=1, column=0, sticky="nsew")
+        self.table_rules_tree.bind("<<TreeviewSelect>>", self._on_table_settings_selected)
+        rules_scroll = ttk.Scrollbar(settings, orient="vertical", command=self.table_rules_tree.yview)
+        rules_scroll.grid(row=1, column=1, sticky="ns")
         self.table_rules_tree.configure(yscrollcommand=rules_scroll.set)
 
-        actions = ttk.Frame(self.table_advanced_frame, style="Card.TFrame")
-        actions.grid(row=4, column=0, sticky="ew", pady=(12, 0))
-        for col in range(2):
+        actions = ttk.Frame(settings, style="Card.TFrame", padding=(10, 8))
+        actions.grid(row=2, column=0, sticky="ew")
+        for col in range(4):
             actions.columnconfigure(col, weight=1, uniform="table_actions")
-        ttk.Button(actions, text="按列预览汇总", style="Secondary.TButton", command=self.merge_tables).grid(row=0, column=0, sticky="ew", padx=(0, 8))
-        ttk.Button(actions, text="按列导出汇总表", style="Primary.TButton", command=self.merge_tables).grid(row=0, column=1, sticky="ew")
+        for index, (text, command) in enumerate([
+            ("添加副表", self.add_table_files),
+            ("删除副表", self.remove_selected_table_setting),
+            ("预览汇总", self.preview_table_merge),
+            ("导出汇总", self.export_table_merge),
+        ]):
+            ttk.Button(actions, text=text, style="Secondary.TButton", command=command).grid(
+                row=0,
+                column=index,
+                sticky="ew",
+                padx=(0, 6) if index < 3 else (0, 0),
+            )
 
         right = ttk.Frame(main, style="Card.TFrame", padding=(18, 16, 18, 16))
         right.grid(row=0, column=2, sticky="nsew")
@@ -1515,10 +1477,14 @@ class OfficeToolGUI:
 
     def use_selected_table_as_master(self) -> None:
         selection = self.table_list.curselection()
-        if not selection:
-            messagebox.showwarning("选择主表", "请先在左侧列表中选中一张表。")
+        if selection:
+            path = self.table_paths[selection[0]].resolve()
+        else:
+            selected_setting = self._selected_table_setting_path()
+            path = selected_setting.resolve() if selected_setting is not None else None
+        if path is None:
+            messagebox.showwarning("选择主表", "请先选中一张表。")
             return
-        path = self.table_paths[selection[0]].resolve()
         self.table_master_path = path
         self.table_master_file.set(path.name)
         self.table_output_file.set(str(path.with_name(f"{path.stem}_汇总结果.xlsx")))
@@ -1526,6 +1492,8 @@ class OfficeToolGUI:
         self._refresh_master_table_choices()
         self._refresh_default_source_choices()
         self._refresh_table_source_list_labels()
+        self._select_table_setting(path)
+        self._load_selected_table_settings(path)
         self._preview_table_path(path, self.table_master_sheet.get().strip() or None)
         self.status_text.set("已将选中表格设为主表")
 
@@ -1607,6 +1575,26 @@ class OfficeToolGUI:
         self._refresh_table_source_list_labels()
         self.status_text.set("选中副表已改为使用默认规则")
 
+    def remove_selected_table_setting(self) -> None:
+        path = self._selected_table_setting_path()
+        if path is None:
+            self.remove_selected_tables()
+            return
+        if self.table_master_path is not None and path.resolve() == self.table_master_path.resolve():
+            messagebox.showwarning("删除副表", "当前行是主表，请在左侧删除或先选择其他主表。")
+            return
+        if path in self.table_paths:
+            index = self.table_paths.index(path)
+            self.table_list.selection_clear(0, tk.END)
+            self.table_list.selection_set(index)
+            self.remove_selected_tables()
+
+    def preview_table_merge(self) -> None:
+        self.merge_tables(preview=True)
+
+    def export_table_merge(self) -> None:
+        self.merge_tables(preview=False)
+
     def inspect_tables(self) -> None:
         try:
             paths = self._table_inspection_paths()
@@ -1627,6 +1615,7 @@ class OfficeToolGUI:
 
     def merge_same_layout_tables(self) -> None:
         try:
+            self._save_selected_table_settings(silent=True)
             master_path = self._table_master_path_from_form()
             source_paths = self._table_source_paths()
             output_path = self._table_output_path(master_path)
@@ -1651,11 +1640,16 @@ class OfficeToolGUI:
             self.status_text.set("同格式汇总失败")
             messagebox.showerror("同格式汇总失败", str(exc))
 
-    def merge_tables(self) -> None:
+    def merge_tables(self, *, preview: bool = False) -> None:
         try:
+            self._save_selected_table_settings(silent=True)
             master_path = self._table_master_path_from_form()
             source_paths = self._table_source_paths()
-            output_path = self._table_output_path(master_path)
+            if preview:
+                preview_dir = Path(tempfile.mkdtemp(prefix="office_tool_table_preview_"))
+                output_path = preview_dir / f"{master_path.stem}_预览.xlsx"
+            else:
+                output_path = self._table_output_path(master_path)
             master_sheet = self.table_master_sheet.get().strip()
             master_key = self.table_master_key_column.get().strip()
             master_target = self.table_master_target_column.get().strip()
@@ -1676,7 +1670,7 @@ class OfficeToolGUI:
             if missing:
                 raise ValueError("请先填写：" + "、".join(missing))
             self._clear_table_results()
-            self.status_text.set("正在汇总表格...")
+            self.status_text.set("正在预览汇总..." if preview else "正在汇总表格...")
 
             def work():
                 sources = [
@@ -1695,10 +1689,14 @@ class OfficeToolGUI:
                 )
 
             def done(report):
-                self._show_table_report(report)
-                self.status_text.set(f"{report.summary()} 输出：{output_path}")
+                if preview:
+                    self._preview_table_path(output_path, master_sheet or None)
+                    self.status_text.set("汇总预览已生成")
+                else:
+                    self._show_table_report(report)
+                    self.status_text.set(f"{report.summary()} 输出：{output_path}")
 
-            self._run_background("表格汇总", work, done)
+            self._run_background("汇总预览" if preview else "表格汇总", work, done)
         except Exception as exc:
             self.status_text.set("表格汇总失败")
             messagebox.showerror("表格汇总失败", str(exc))
@@ -1809,14 +1807,99 @@ class OfficeToolGUI:
         self._prefer_existing_or_first(self.table_selected_source_value_column, headers, ["任务回复", "落实", "回复内容", "回复"])
         self._preview_table_path(self.table_selected_source_path, self.table_selected_source_sheet.get())
 
+    def _on_selected_table_setting_changed(self) -> None:
+        path = self.table_selected_source_path
+        if path is None:
+            return
+        headers = self._headers_for_path_sheet(path, self.table_selected_source_sheet.get())
+        for box in [self.table_selected_source_key_box, self.table_selected_source_value_box]:
+            if box is not None:
+                box.configure(values=headers)
+        self._prefer_existing_or_first(self.table_selected_source_key_column, headers, ["任务详情", "下达任务", "任务名称", "任务"])
+        self._prefer_existing_or_first(self.table_selected_source_value_column, headers, ["任务回复", "落实", "回复内容", "回复"])
+        self._save_selected_table_settings(silent=True)
+        self._preview_table_path(path, self.table_selected_source_sheet.get())
+
     def _on_table_source_selected(self, _event=None) -> None:
         selection = self.table_list.curselection()
         if not selection:
             return
         path = self.table_paths[selection[0]]
         self.table_selected_source_path = path
-        self._load_selected_source_form(path)
+        self._select_table_setting(path)
+        self._load_selected_table_settings(path)
         self._preview_table_path(path, self.table_selected_source_sheet.get().strip() or None)
+
+    def _on_table_settings_selected(self, _event=None) -> None:
+        path = self._selected_table_setting_path()
+        if path is None:
+            return
+        self.table_selected_source_path = path
+        self._load_selected_table_settings(path)
+        self._preview_table_path(path, self.table_selected_source_sheet.get().strip() or None)
+
+    def _selected_table_setting_path(self) -> Path | None:
+        if self.table_rules_tree is None:
+            return None
+        selection = self.table_rules_tree.selection()
+        if not selection:
+            return None
+        return Path(selection[0])
+
+    def _select_table_setting(self, path: Path) -> None:
+        if self.table_rules_tree is None:
+            return
+        item = str(path.resolve())
+        if self.table_rules_tree.exists(item):
+            self.table_rules_tree.selection_set(item)
+            self.table_rules_tree.see(item)
+
+    def _load_selected_table_settings(self, path: Path) -> None:
+        infos = self.table_workbook_infos.get(path.resolve()) or []
+        sheets = [info.sheet for info in infos]
+        is_master = self.table_master_path is not None and path.resolve() == self.table_master_path.resolve()
+        if is_master:
+            requested_sheet = self.table_master_sheet.get().strip()
+            key = self.table_master_key_column.get()
+            value = self.table_master_target_column.get()
+        else:
+            override = self.table_source_overrides.get(path, {})
+            requested_sheet = override.get("sheet") or self.table_source_sheet.get().strip()
+            key = override.get("key") or self.table_source_key_column.get()
+            value = override.get("value") or self.table_source_value_column.get()
+        sheet = requested_sheet if requested_sheet in sheets else (sheets[0] if sheets else "")
+        headers = self._headers_for_path_sheet(path, sheet)
+        self.table_selected_source_sheet.set(sheet)
+        self.table_selected_source_key_column.set(key)
+        self.table_selected_source_value_column.set(value)
+        for box in [self.table_selected_source_sheet_box]:
+            if box is not None:
+                box.configure(values=sheets)
+        for box in [self.table_selected_source_key_box, self.table_selected_source_value_box]:
+            if box is not None:
+                box.configure(values=headers)
+        self._prefer_existing_or_first(self.table_selected_source_key_column, headers, ["任务详情", "下达任务", "任务名称", "任务"])
+        self._prefer_existing_or_first(self.table_selected_source_value_column, headers, ["任务回复", "落实", "回复内容", "办理情况", "回复"])
+
+    def _save_selected_table_settings(self, *, silent: bool = False) -> None:
+        path = self.table_selected_source_path
+        if path is None:
+            return
+        is_master = self.table_master_path is not None and path.resolve() == self.table_master_path.resolve()
+        if is_master:
+            self.table_master_sheet.set(self.table_selected_source_sheet.get().strip())
+            self.table_master_key_column.set(self.table_selected_source_key_column.get().strip())
+            self.table_master_target_column.set(self.table_selected_source_value_column.get().strip())
+        else:
+            self.table_source_overrides[path] = {
+                "sheet": self.table_selected_source_sheet.get().strip(),
+                "key": self.table_selected_source_key_column.get().strip(),
+                "value": self.table_selected_source_value_column.get().strip(),
+            }
+        self._refresh_table_source_list_labels()
+        self._select_table_setting(path)
+        if not silent:
+            self.status_text.set("设置已更新")
 
     def _load_selected_source_form(self, path: Path) -> None:
         override = self.table_source_overrides.get(path, {})
@@ -1887,19 +1970,38 @@ class OfficeToolGUI:
     def _refresh_table_rules_tree(self) -> None:
         if self.table_rules_tree is None:
             return
+        selection = self.table_rules_tree.selection()
+        selected = selection[0] if selection else ""
         for item in self.table_rules_tree.get_children():
             self.table_rules_tree.delete(item)
-        for path, override in self.table_source_overrides.items():
+        master = self.table_master_path.resolve() if self.table_master_path is not None else None
+        for path in self.table_paths:
+            resolved = path.resolve()
+            is_master = master is not None and resolved == master
+            if is_master:
+                sheet = self.table_master_sheet.get()
+                key = self.table_master_key_column.get()
+                value = self.table_master_target_column.get()
+            else:
+                override = self.table_source_overrides.get(path, {})
+                sheet = override.get("sheet") or self.table_source_sheet.get()
+                key = override.get("key") or self.table_source_key_column.get()
+                value = override.get("value") or self.table_source_value_column.get()
+            item_id = str(resolved)
             self.table_rules_tree.insert(
                 "",
                 tk.END,
+                iid=item_id,
                 values=(
+                    "主表" if is_master else "副表",
                     path.name,
-                    override.get("sheet", ""),
-                    override.get("key", ""),
-                    override.get("value", ""),
+                    sheet,
+                    key,
+                    value,
                 ),
             )
+        if selected and self.table_rules_tree.exists(selected):
+            self.table_rules_tree.selection_set(selected)
 
     def add_document_folder(self) -> None:
         folder = filedialog.askdirectory(title="选择文件夹")
