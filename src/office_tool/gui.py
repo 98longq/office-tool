@@ -1911,7 +1911,7 @@ class OfficeToolGUI:
             path = Path(raw).resolve()
             if path not in self.document_paths:
                 self.document_paths.append(path)
-                self.doc_list.insert(tk.END, str(path))
+                self.doc_list.insert(tk.END, path.name)
         if paths:
             self._refresh_default_document_targets()
         self._refresh_document_placeholder()
