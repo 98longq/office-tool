@@ -812,7 +812,7 @@ class OfficeToolGUI:
         role.grid(row=1, column=0, sticky="ew", pady=(10, 12))
         role.columnconfigure(1, weight=1)
         ttk.Button(role, text="选中作为主表", style="Primary.TButton", command=self.use_selected_table_as_master).grid(row=0, column=0, sticky="ew", padx=(0, 8), pady=(0, 8))
-        ttk.Entry(role, textvariable=self.table_master_file).grid(row=0, column=1, sticky="ew", pady=(0, 8))
+        ttk.Entry(role, textvariable=self.table_master_file, state="readonly").grid(row=0, column=1, sticky="ew", pady=(0, 8))
         ttk.Button(role, text="另选主表", style="Secondary.TButton", command=self.choose_table_master).grid(row=1, column=0, sticky="ew", padx=(0, 8))
         ttk.Label(role, text="副表：左侧列表中除主表外的表格", style="TintMuted.TLabel").grid(row=1, column=1, sticky="w")
 
@@ -820,8 +820,7 @@ class OfficeToolGUI:
         quick.grid(row=2, column=0, sticky="ew", pady=(0, 12))
         quick.columnconfigure(0, weight=1)
         ttk.Button(quick, text="一键同格式汇总", style="Primary.TButton", command=self.merge_same_layout_tables).grid(row=0, column=0, sticky="ew", pady=(0, 8))
-        ttk.Button(quick, text="检查结构", style="Secondary.TButton", command=self.inspect_tables).grid(row=1, column=0, sticky="ew", pady=(0, 8))
-        ttk.Button(quick, textvariable=self.table_advanced_button_text, style="Subtle.TButton", command=self.toggle_table_advanced).grid(row=2, column=0, sticky="ew")
+        ttk.Button(quick, textvariable=self.table_advanced_button_text, style="Subtle.TButton", command=self.toggle_table_advanced).grid(row=1, column=0, sticky="ew")
 
         self.table_advanced_frame = ttk.Frame(rules_panel, style="Card.TFrame")
         self.table_advanced_frame.grid(row=3, column=0, sticky="nsew")
@@ -1485,7 +1484,7 @@ class OfficeToolGUI:
         if not path:
             return
         self.table_master_path = Path(path).resolve()
-        self.table_master_file.set(str(self.table_master_path))
+        self.table_master_file.set(self.table_master_path.name)
         self.table_output_file.set(str(self.table_master_path.with_name(f"{self.table_master_path.stem}_汇总结果.xlsx")))
         self._load_table_workbook_info(self.table_master_path)
         self._refresh_master_table_choices()
@@ -1521,7 +1520,7 @@ class OfficeToolGUI:
             return
         path = self.table_paths[selection[0]].resolve()
         self.table_master_path = path
-        self.table_master_file.set(str(path))
+        self.table_master_file.set(path.name)
         self.table_output_file.set(str(path.with_name(f"{path.stem}_汇总结果.xlsx")))
         self._load_table_workbook_info(path)
         self._refresh_master_table_choices()
@@ -1726,9 +1725,6 @@ class OfficeToolGUI:
         return source_paths
 
     def _table_master_path_from_form(self, required: bool = True) -> Path | None:
-        raw = self.table_master_file.get().strip()
-        if raw:
-            self.table_master_path = Path(raw).expanduser().resolve()
         if self.table_master_path is None:
             if required:
                 raise ValueError("请先选择主表。")
