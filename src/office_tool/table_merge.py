@@ -117,6 +117,70 @@ def merge_by_columns(options: TableMergeOptions) -> TableReport:
     return report
 
 
+def merge_same_layout(
+    master_path: str | Path,
+    source_paths: list[str | Path],
+    output_path: str | Path,
+    *,
+    master_sheet: str | None = None,
+    source_sheet: str | None = None,
+    separator: str = "\n",
+) -> TableReport:
+    """Merge same-layout workbooks by cell position, preserving the master workbook."""
+    master_path = Path(master_path).expanduser().resolve()
+    output_path = Path(output_path).expanduser().resolve()
+    master_wb = _load_workbook(master_path, data_only=False)
+    master_ws = master_wb[master_sheet] if master_sheet else master_wb.worksheets[0]
+
+    report = TableReport()
+    report.stats["master"] = str(master_path)
+    report.stats["output"] = str(output_path)
+    report.stats["sources"] = len(source_paths)
+    report.stats["updated_cells"] = 0
+    report.stats["appended_values"] = 0
+    header_row = detect_header_row(master_ws)
+    report.sheets.append(_sheet_info(str(master_path), master_ws, header_row, headers_for_row(master_ws, header_row)))
+
+    for raw_source in source_paths:
+        source_path = Path(raw_source).expanduser().resolve()
+        workbook = _load_workbook(source_path, data_only=False)
+        if source_sheet:
+            if source_sheet not in workbook.sheetnames:
+                report.add_finding(
+                    "missing_source_sheet",
+                    "warning",
+                    "副表不存在指定工作表，已使用第一个工作表。",
+                    workbook=source_path,
+                    sheet=source_sheet,
+                    suggestion="如该副表格式特殊，请在高级设置中单独配置。",
+                )
+                sheet = workbook.worksheets[0]
+            else:
+                sheet = workbook[source_sheet]
+        else:
+            sheet = workbook.worksheets[0]
+        source_header_row = detect_header_row(sheet)
+        report.sheets.append(_sheet_info(str(source_path), sheet, source_header_row, headers_for_row(sheet, source_header_row)))
+        max_row = min(master_ws.max_row, sheet.max_row)
+        max_col = min(master_ws.max_column, sheet.max_column)
+        for row in range(1, max_row + 1):
+            for column in range(1, max_col + 1):
+                value = normalized_cell_text(sheet.cell(row, column).value, normalize=False)
+                if not value:
+                    continue
+                target_cell = master_ws.cell(row, column)
+                existing = split_cell_values(target_cell.value, separator)
+                if value in existing:
+                    continue
+                target_cell.value = separator.join(existing + [value]) if existing else value
+                report.stats["updated_cells"] += 1
+                report.stats["appended_values"] += 1
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    master_wb.save(output_path)
+    return report
+
+
 def resolve_column(sheet: "Worksheet", header_row: int, column: str | int) -> int:
     if isinstance(column, int):
         if column < 1:

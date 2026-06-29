@@ -5,7 +5,7 @@ from pathlib import Path
 from openpyxl import Workbook, load_workbook
 
 from office_tool.table_audit import TableWorkbookInspector, collect_table_inputs, detect_header_row
-from office_tool.table_merge import merge_by_columns
+from office_tool.table_merge import merge_by_columns, merge_same_layout
 from office_tool.table_models import SourceColumnMapping, TableMergeOptions
 
 
@@ -133,6 +133,46 @@ class TableModuleTests(unittest.TestCase):
         self.assertEqual(sheet["B2"].value, "A 已落实\nB 已落实")
         self.assertEqual(sheet["B3"].value, "B 已反馈")
         self.assertEqual(report.stats["updated_cells"], 2)
+
+    def test_merge_same_layout_appends_by_cell_position(self):
+        with tempfile.TemporaryDirectory(prefix="office_tool_table_same_layout_") as tmp:
+            root = Path(tmp)
+            master = root / "master.xlsx"
+            source_a = root / "source_a.xlsx"
+            source_b = root / "source_b.xlsx"
+            output = root / "merged.xlsx"
+
+            master_wb = Workbook()
+            master_ws = master_wb.active
+            master_ws.title = "总表"
+            master_ws.append(["任务", "办公室", "财务部"])
+            master_ws.append(["任务一", "", ""])
+            master_ws.append(["任务二", "", ""])
+            master_wb.save(master)
+
+            source_a_wb = Workbook()
+            source_a_ws = source_a_wb.active
+            source_a_ws.append(["任务", "办公室", "财务部"])
+            source_a_ws.append(["任务一", "已完成", ""])
+            source_a_ws.append(["任务二", "推进中", ""])
+            source_a_wb.save(source_a)
+
+            source_b_wb = Workbook()
+            source_b_ws = source_b_wb.active
+            source_b_ws.append(["任务", "办公室", "财务部"])
+            source_b_ws.append(["任务一", "", "已反馈"])
+            source_b_ws.append(["任务二", "", "推进中"])
+            source_b_wb.save(source_b)
+
+            report = merge_same_layout(master, [source_a, source_b], output)
+            merged = load_workbook(output)
+            sheet = merged["总表"]
+
+        self.assertEqual(sheet["B2"].value, "已完成")
+        self.assertEqual(sheet["C2"].value, "已反馈")
+        self.assertEqual(sheet["B3"].value, "推进中")
+        self.assertEqual(sheet["C3"].value, "推进中")
+        self.assertEqual(report.stats["updated_cells"], 4)
 
     def test_collect_table_inputs_skips_temporary_files(self):
         with tempfile.TemporaryDirectory(prefix="office_tool_table_collect_") as tmp:
