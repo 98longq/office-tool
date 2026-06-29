@@ -790,13 +790,16 @@ class OfficeToolGUI:
             source_tools.columnconfigure(column, weight=1, uniform="source_tools")
         for index, (text, command) in enumerate([
             ("导入表格", self.add_table_files),
+            ("导出表格", self.merge_same_layout_tables),
             ("删除选中", self.remove_selected_tables),
+            ("清空列表", self.clear_tables),
         ]):
             ttk.Button(source_tools, text=text, style="Workbench.TButton", command=command).grid(
-                row=0,
-                column=index,
+                row=index // 2,
+                column=index % 2,
                 sticky="ew",
                 padx=(0, 6) if index % 2 == 0 else (6, 0),
+                pady=(0, 6) if index < 2 else (0, 0),
             )
 
         rules_panel = ttk.Frame(main, style="Card.TFrame", padding=(18, 16, 18, 16))
@@ -1504,7 +1507,6 @@ class OfficeToolGUI:
             path = Path(raw).resolve()
             if path not in self.table_paths:
                 self.table_paths.append(path)
-                self.table_list.insert(tk.END, str(path))
                 self._load_table_workbook_info(path)
         self._refresh_table_placeholder()
         self._refresh_default_source_choices()
@@ -1883,7 +1885,7 @@ class OfficeToolGUI:
             if path in self.table_source_overrides:
                 markers.append("特殊")
             prefix = f"[{'/'.join(markers)}] " if markers else ""
-            self.table_list.insert(tk.END, prefix + str(path))
+            self.table_list.insert(tk.END, prefix + path.name)
         self._refresh_table_rules_tree()
 
     def _refresh_table_rules_tree(self) -> None:
