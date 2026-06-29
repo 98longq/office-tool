@@ -522,6 +522,9 @@ class OfficeToolGUI:
         style.configure("Treeview", background=c["white"], fieldbackground=c["white"], foreground=c["text"], borderwidth=0, rowheight=30)
         style.configure("Treeview.Heading", background=c["surface_alt"], foreground=c["text"], font=(FONT_FAMILY, 9, "bold"), relief="flat")
         style.map("Treeview", background=[("selected", c["primary_soft"])], foreground=[("selected", c["text"])])
+        style.configure("Settings.Treeview", background=c["white"], fieldbackground=c["white"], foreground=c["text"], borderwidth=0, rowheight=34)
+        style.configure("Settings.Treeview.Heading", background=c["surface_tint"], foreground=c["accent"], font=(FONT_FAMILY, 9, "bold"), relief="flat")
+        style.map("Settings.Treeview", background=[("selected", c["primary_soft"])], foreground=[("selected", c["primary"])])
 
         option = self.root.option_add
         for key, value in [
@@ -864,6 +867,7 @@ class OfficeToolGUI:
             columns=("role", "file", "sheet", "key", "value"),
             show="headings",
             height=9,
+            style="Settings.Treeview",
         )
         for col, label, width in [
             ("role", "类型", 54),
@@ -872,8 +876,8 @@ class OfficeToolGUI:
             ("key", "匹配列", 90),
             ("value", "取值列", 90),
         ]:
-            self.table_rules_tree.heading(col, text=label)
-            self.table_rules_tree.column(col, width=width, minwidth=50, stretch=True)
+            self.table_rules_tree.heading(col, text=label, anchor="center")
+            self.table_rules_tree.column(col, width=width, minwidth=50, stretch=True, anchor="center")
         self.table_rules_tree.grid(row=1, column=0, sticky="nsew")
         self.table_rules_tree.bind("<<TreeviewSelect>>", self._on_table_settings_selected)
         rules_scroll = ttk.Scrollbar(settings, orient="vertical", command=self.table_rules_tree.yview)
