@@ -803,17 +803,42 @@ class OfficeToolGUI:
                 pady=(0, 6) if index < 2 else (0, 0),
             )
 
+        fuzzy = ttk.Frame(source_panel, style="Toolbar.TFrame")
+        fuzzy.grid(row=2, column=0, sticky="ew", pady=(12, 0))
+        fuzzy.columnconfigure(1, weight=1)
+        ttk.Checkbutton(fuzzy, text="模糊匹配", variable=self.table_fuzzy_enabled).grid(row=0, column=0, sticky="w", padx=(0, 10))
+        ttk.Scale(
+            fuzzy,
+            from_=60,
+            to=100,
+            variable=self.table_fuzzy_threshold,
+            orient="horizontal",
+            command=lambda value: self.table_fuzzy_threshold.set(int(float(value))),
+        ).grid(row=0, column=1, sticky="ew", padx=(0, 10))
+        ttk.Label(fuzzy, textvariable=self.table_fuzzy_threshold, style="Card.TLabel", width=4).grid(row=0, column=2, sticky="e")
+
         rules_panel = ttk.Frame(main, style="Card.TFrame", padding=(18, 16, 18, 16))
         rules_panel.grid(row=0, column=1, sticky="nsew", padx=(0, 12))
         rules_panel.columnconfigure(0, weight=1)
         rules_panel.rowconfigure(2, weight=1)
 
-        role = ttk.Frame(rules_panel, style="Tint.TFrame", padding=(12, 10))
+        role = ttk.Frame(rules_panel, style="Toolbar.TFrame")
         role.grid(row=0, column=0, sticky="ew", pady=(0, 12))
         for column in range(2):
             role.columnconfigure(column, weight=1, uniform="table_top_actions")
-        ttk.Button(role, text="设为主表", style="Workbench.TButton", command=self.use_selected_table_as_master).grid(row=0, column=0, sticky="ew", padx=(0, 10))
-        ttk.Button(role, text="一键汇总", style="Workbench.TButton", command=self.merge_same_layout_tables).grid(row=0, column=1, sticky="ew", padx=(10, 0))
+        for index, (text, command) in enumerate([
+            ("设为主表", self.use_selected_table_as_master),
+            ("一键汇总", self.merge_same_layout_tables),
+            ("添加副表", self.add_table_files),
+            ("删除副表", self.remove_selected_table_setting),
+        ]):
+            ttk.Button(role, text=text, style="Workbench.TButton", command=command).grid(
+                row=index // 2,
+                column=index % 2,
+                sticky="ew",
+                padx=(0, 6) if index % 2 == 0 else (6, 0),
+                pady=(0, 6) if index < 2 else (0, 0),
+            )
 
         settings = ttk.Frame(rules_panel, style="Tint.TFrame", padding=(1, 1))
         settings.grid(row=2, column=0, sticky="nsew")
@@ -855,37 +880,20 @@ class OfficeToolGUI:
         rules_scroll.grid(row=1, column=1, sticky="ns")
         self.table_rules_tree.configure(yscrollcommand=rules_scroll.set)
 
-        actions = ttk.Frame(settings, style="Card.TFrame", padding=(10, 8))
+        actions = ttk.Frame(settings, style="Toolbar.TFrame")
         actions.grid(row=2, column=0, sticky="ew")
-        for col in range(4):
+        for col in range(2):
             actions.columnconfigure(col, weight=1, uniform="table_actions")
         for index, (text, command) in enumerate([
-            ("添加副表", self.add_table_files),
-            ("删除副表", self.remove_selected_table_setting),
             ("预览汇总", self.preview_table_merge),
             ("导出汇总", self.export_table_merge),
         ]):
             ttk.Button(actions, text=text, style="Workbench.TButton", command=command).grid(
-                row=index // 2,
-                column=index % 2,
+                row=0,
+                column=index,
                 sticky="ew",
                 padx=(0, 6) if index % 2 == 0 else (6, 0),
-                pady=(0, 6) if index < 2 else (0, 0),
             )
-
-        fuzzy = ttk.Frame(settings, style="Card.TFrame", padding=(10, 8))
-        fuzzy.grid(row=3, column=0, sticky="ew")
-        fuzzy.columnconfigure(1, weight=1)
-        ttk.Checkbutton(fuzzy, text="模糊匹配", variable=self.table_fuzzy_enabled).grid(row=0, column=0, sticky="w", padx=(0, 10))
-        ttk.Scale(
-            fuzzy,
-            from_=60,
-            to=100,
-            variable=self.table_fuzzy_threshold,
-            orient="horizontal",
-            command=lambda value: self.table_fuzzy_threshold.set(int(float(value))),
-        ).grid(row=0, column=1, sticky="ew", padx=(0, 10))
-        ttk.Label(fuzzy, textvariable=self.table_fuzzy_threshold, style="Card.TLabel", width=4).grid(row=0, column=2, sticky="e")
 
         right = ttk.Frame(main, style="Card.TFrame", padding=(18, 16, 18, 16))
         right.grid(row=0, column=2, sticky="nsew")
