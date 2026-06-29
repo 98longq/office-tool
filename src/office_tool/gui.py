@@ -425,6 +425,10 @@ class OfficeToolGUI:
         self.table_selected_source_sheet_box: ttk.Combobox | None = None
         self.table_selected_source_key_box: ttk.Combobox | None = None
         self.table_selected_source_value_box: ttk.Combobox | None = None
+        self.table_rules_tree: ttk.Treeview | None = None
+        self.table_preview_canvas: tk.Canvas | None = None
+        self.table_preview_frame: ttk.Frame | None = None
+        self.table_preview_placeholder: tk.Label | None = None
 
         self._init_config_vars()
         self._load_ai_profiles()
@@ -734,55 +738,39 @@ class OfficeToolGUI:
         page.columnconfigure(0, weight=1)
         page.rowconfigure(0, weight=1)
 
-        main = ttk.Frame(page, style="TFrame")
-        main.grid(row=0, column=0, sticky="nsew")
-        main.columnconfigure(0, weight=4, uniform="table")
-        main.columnconfigure(1, weight=7, uniform="table")
+        modes = ttk.Notebook(page)
+        modes.grid(row=0, column=0, sticky="nsew")
+        merge_page = ttk.Frame(modes, style="TFrame", padding=(0, 0, 0, 0))
+        split_page = self._placeholder_tab(modes, "拆分表格功能正在开发中")
+        inspect_page = self._placeholder_tab(modes, "表格检查功能将独立整理")
+        modes.add(merge_page, text="汇总填报")
+        modes.add(split_page, text="拆分表格")
+        modes.add(inspect_page, text="表格检查")
+
+        merge_page.columnconfigure(0, weight=1)
+        merge_page.rowconfigure(0, weight=1)
+        main = ttk.Frame(merge_page, style="TFrame")
+        main.grid(row=0, column=0, sticky="nsew", pady=(12, 0))
+        main.columnconfigure(0, weight=3, uniform="table")
+        main.columnconfigure(1, weight=4, uniform="table")
+        main.columnconfigure(2, weight=6, uniform="table")
         main.rowconfigure(0, weight=1)
 
-        left = ttk.Frame(main, style="Card.TFrame", padding=(20, 18, 20, 18))
-        left.grid(row=0, column=0, sticky="nsew", padx=(0, 16))
-        left.columnconfigure(0, weight=1)
-        left.rowconfigure(5, weight=1)
+        source_panel = ttk.Frame(main, style="Card.TFrame", padding=(18, 16, 18, 16))
+        source_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
+        source_panel.columnconfigure(0, weight=1)
+        source_panel.rowconfigure(3, weight=1)
 
-        ttk.Label(left, text="主表", style="Section.TLabel").grid(row=0, column=0, sticky="w")
-        master = ttk.Frame(left, style="Card.TFrame")
-        master.grid(row=1, column=0, sticky="ew", pady=(8, 12))
+        ttk.Label(source_panel, text="数据源", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        master = ttk.Frame(source_panel, style="Card.TFrame")
+        master.grid(row=1, column=0, sticky="ew", pady=(10, 14))
         master.columnconfigure(1, weight=1)
-        master.columnconfigure(3, weight=1)
-        ttk.Button(master, text="选择主表", style="Workbench.TButton", command=self.choose_table_master).grid(row=0, column=0, sticky="ew", padx=(0, 10), pady=(0, 8))
-        ttk.Entry(master, textvariable=self.table_master_file).grid(row=0, column=1, columnspan=3, sticky="ew", pady=(0, 8))
-        ttk.Label(master, text="工作表", style="Card.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
-        self.table_master_sheet_box = ttk.Combobox(master, textvariable=self.table_master_sheet, state="readonly")
-        self.table_master_sheet_box.grid(row=1, column=1, sticky="ew", padx=(0, 10), pady=4)
-        ttk.Label(master, text="校验列", style="Card.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=4)
-        self.table_master_key_box = ttk.Combobox(master, textvariable=self.table_master_key_column)
-        self.table_master_key_box.grid(row=2, column=1, sticky="ew", padx=(0, 10), pady=4)
-        ttk.Label(master, text="填入列", style="Card.TLabel").grid(row=2, column=2, sticky="w", padx=(0, 8), pady=4)
-        self.table_master_target_box = ttk.Combobox(master, textvariable=self.table_master_target_column)
-        self.table_master_target_box.grid(row=2, column=3, sticky="ew", pady=4)
-        if self.table_master_sheet_box is not None:
-            self.table_master_sheet_box.bind("<<ComboboxSelected>>", lambda _e: self._on_master_sheet_changed())
+        ttk.Button(master, text="选择主表", style="Primary.TButton", command=self.choose_table_master).grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        ttk.Entry(master, textvariable=self.table_master_file).grid(row=0, column=1, sticky="ew")
 
-        ttk.Label(left, text="副表默认规则", style="Section.TLabel").grid(row=2, column=0, sticky="w")
-        defaults = ttk.Frame(left, style="Tint.TFrame", padding=(14, 12))
-        defaults.grid(row=3, column=0, sticky="ew", pady=(8, 12))
-        for column in range(6):
-            defaults.columnconfigure(column, weight=1)
-        ttk.Label(defaults, text="工作表", style="TintMuted.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=5)
-        self.table_source_sheet_box = ttk.Combobox(defaults, textvariable=self.table_source_sheet)
-        self.table_source_sheet_box.grid(row=0, column=1, sticky="ew", padx=(0, 10), pady=5)
-        ttk.Label(defaults, text="校验列", style="TintMuted.TLabel").grid(row=0, column=2, sticky="w", padx=(0, 8), pady=5)
-        self.table_source_key_box = ttk.Combobox(defaults, textvariable=self.table_source_key_column)
-        self.table_source_key_box.grid(row=0, column=3, sticky="ew", padx=(0, 10), pady=5)
-        ttk.Label(defaults, text="数据列", style="TintMuted.TLabel").grid(row=0, column=4, sticky="w", padx=(0, 8), pady=5)
-        self.table_source_value_box = ttk.Combobox(defaults, textvariable=self.table_source_value_column)
-        self.table_source_value_box.grid(row=0, column=5, sticky="ew", pady=5)
-        if self.table_source_sheet_box is not None:
-            self.table_source_sheet_box.bind("<<ComboboxSelected>>", lambda _e: self._on_default_source_sheet_changed())
-
-        list_wrap = ttk.Frame(left, style="Tint.TFrame", padding=1)
-        list_wrap.grid(row=5, column=0, sticky="nsew")
+        ttk.Label(source_panel, text="副表", style="Section.TLabel").grid(row=2, column=0, sticky="w")
+        list_wrap = ttk.Frame(source_panel, style="Tint.TFrame", padding=1)
+        list_wrap.grid(row=3, column=0, sticky="nsew", pady=(10, 0))
         list_wrap.columnconfigure(0, weight=1)
         list_wrap.rowconfigure(0, weight=1)
         self.table_list = tk.Listbox(list_wrap, activestyle="none", exportselection=False)
@@ -800,11 +788,65 @@ class OfficeToolGUI:
         self.table_list_placeholder.place(relx=0.5, rely=0.5, anchor="center")
         self.table_list.bind("<<ListboxSelect>>", self._on_table_source_selected)
 
-        selected = ttk.Frame(left, style="Card.TFrame")
-        selected.grid(row=6, column=0, sticky="ew", pady=(12, 0))
+        source_tools = ttk.Frame(source_panel, style="Toolbar.TFrame")
+        source_tools.grid(row=4, column=0, sticky="ew", pady=(12, 0))
+        for column in range(2):
+            source_tools.columnconfigure(column, weight=1, uniform="source_tools")
+        for index, (text, command) in enumerate([
+            ("添加副表", self.add_table_files),
+            ("添加文件夹", self.add_table_folder),
+            ("移除副表", self.remove_selected_tables),
+            ("清空副表", self.clear_tables),
+        ]):
+            ttk.Button(source_tools, text=text, style="Workbench.TButton", command=command).grid(
+                row=index // 2,
+                column=index % 2,
+                sticky="ew",
+                padx=(0, 6) if index % 2 == 0 else (6, 0),
+                pady=(0, 6) if index < 2 else (0, 0),
+            )
+
+        rules_panel = ttk.Frame(main, style="Card.TFrame", padding=(18, 16, 18, 16))
+        rules_panel.grid(row=0, column=1, sticky="nsew", padx=(0, 12))
+        rules_panel.columnconfigure(0, weight=1)
+        rules_panel.rowconfigure(4, weight=1)
+        ttk.Label(rules_panel, text="匹配规则", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+
+        master_rules = ttk.Frame(rules_panel, style="Tint.TFrame", padding=(12, 10))
+        master_rules.grid(row=1, column=0, sticky="ew", pady=(10, 12))
+        master_rules.columnconfigure(1, weight=1)
+        master_rules.columnconfigure(3, weight=1)
+        ttk.Label(master_rules, text="主表工作表", style="TintMuted.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.table_master_sheet_box = ttk.Combobox(master_rules, textvariable=self.table_master_sheet, state="readonly")
+        self.table_master_sheet_box.grid(row=0, column=1, columnspan=3, sticky="ew", pady=4)
+        ttk.Label(master_rules, text="匹配列", style="TintMuted.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.table_master_key_box = ttk.Combobox(master_rules, textvariable=self.table_master_key_column)
+        self.table_master_key_box.grid(row=1, column=1, sticky="ew", padx=(0, 10), pady=4)
+        ttk.Label(master_rules, text="填入列", style="TintMuted.TLabel").grid(row=1, column=2, sticky="w", padx=(0, 8), pady=4)
+        self.table_master_target_box = ttk.Combobox(master_rules, textvariable=self.table_master_target_column)
+        self.table_master_target_box.grid(row=1, column=3, sticky="ew", pady=4)
+        self.table_master_sheet_box.bind("<<ComboboxSelected>>", lambda _e: self._on_master_sheet_changed())
+
+        default_rules = ttk.Frame(rules_panel, style="Tint.TFrame", padding=(12, 10))
+        default_rules.grid(row=2, column=0, sticky="ew", pady=(0, 12))
+        default_rules.columnconfigure(1, weight=1)
+        default_rules.columnconfigure(3, weight=1)
+        ttk.Label(default_rules, text="副表默认工作表", style="TintMuted.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.table_source_sheet_box = ttk.Combobox(default_rules, textvariable=self.table_source_sheet)
+        self.table_source_sheet_box.grid(row=0, column=1, columnspan=3, sticky="ew", pady=4)
+        ttk.Label(default_rules, text="匹配列", style="TintMuted.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
+        self.table_source_key_box = ttk.Combobox(default_rules, textvariable=self.table_source_key_column)
+        self.table_source_key_box.grid(row=1, column=1, sticky="ew", padx=(0, 10), pady=4)
+        ttk.Label(default_rules, text="取值列", style="TintMuted.TLabel").grid(row=1, column=2, sticky="w", padx=(0, 8), pady=4)
+        self.table_source_value_box = ttk.Combobox(default_rules, textvariable=self.table_source_value_column)
+        self.table_source_value_box.grid(row=1, column=3, sticky="ew", pady=4)
+        self.table_source_sheet_box.bind("<<ComboboxSelected>>", lambda _e: self._on_default_source_sheet_changed())
+
+        selected = ttk.Frame(rules_panel, style="Card.TFrame")
+        selected.grid(row=3, column=0, sticky="ew", pady=(0, 12))
         for column in range(6):
             selected.columnconfigure(column, weight=1)
-        ttk.Label(selected, text="选中副表特殊规则", style="Card.TLabel").grid(row=0, column=0, columnspan=6, sticky="w", pady=(0, 6))
+        ttk.Label(selected, text="选中副表特殊规则", style="Section.TLabel").grid(row=0, column=0, columnspan=6, sticky="w", pady=(0, 6))
         ttk.Label(selected, text="工作表", style="Card.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
         self.table_selected_source_sheet_box = ttk.Combobox(selected, textvariable=self.table_selected_source_sheet)
         self.table_selected_source_sheet_box.grid(row=1, column=1, sticky="ew", padx=(0, 10), pady=4)
@@ -819,44 +861,48 @@ class OfficeToolGUI:
         if self.table_selected_source_sheet_box is not None:
             self.table_selected_source_sheet_box.bind("<<ComboboxSelected>>", lambda _e: self._on_selected_source_sheet_changed())
 
-        source_tools = ttk.Frame(left, style="Toolbar.TFrame")
-        source_tools.grid(row=7, column=0, sticky="ew", pady=(12, 0))
-        for column in range(4):
-            source_tools.columnconfigure(column, weight=1, uniform="source_tools")
-        for index, (text, command) in enumerate([
-            ("添加副表", self.add_table_files),
-            ("添加文件夹", self.add_table_folder),
-            ("移除副表", self.remove_selected_tables),
-            ("清空副表", self.clear_tables),
-        ]):
-            ttk.Button(source_tools, text=text, style="Workbench.TButton", command=command).grid(
-                row=0,
-                column=index,
-                sticky="ew",
-                padx=(0, 8) if index < 3 else (0, 0),
-            )
+        special = ttk.Frame(rules_panel, style="Tint.TFrame", padding=1)
+        special.grid(row=4, column=0, sticky="nsew")
+        special.columnconfigure(0, weight=1)
+        special.rowconfigure(0, weight=1)
+        self.table_rules_tree = ttk.Treeview(
+            special,
+            columns=("file", "sheet", "key", "value"),
+            show="headings",
+            height=6,
+        )
+        for col, label, width in [
+            ("file", "特殊副表", 150),
+            ("sheet", "工作表", 90),
+            ("key", "匹配列", 90),
+            ("value", "取值列", 90),
+        ]:
+            self.table_rules_tree.heading(col, text=label)
+            self.table_rules_tree.column(col, width=width, minwidth=70, stretch=True)
+        self.table_rules_tree.grid(row=0, column=0, sticky="nsew")
+        rules_scroll = ttk.Scrollbar(special, orient="vertical", command=self.table_rules_tree.yview)
+        rules_scroll.grid(row=0, column=1, sticky="ns")
+        self.table_rules_tree.configure(yscrollcommand=rules_scroll.set)
 
-        output = ttk.Frame(left, style="Card.TFrame")
-        output.grid(row=8, column=0, sticky="ew", pady=(16, 0))
+        output = ttk.Frame(rules_panel, style="Card.TFrame")
+        output.grid(row=5, column=0, sticky="ew", pady=(12, 0))
         output.columnconfigure(1, weight=1)
         ttk.Button(output, text="导出位置", style="Secondary.TButton", command=self.choose_table_output).grid(row=0, column=0, sticky="ew", padx=(0, 10))
         ttk.Entry(output, textvariable=self.table_output_file).grid(row=0, column=1, sticky="ew")
 
-        actions = ttk.Frame(left, style="Card.TFrame")
-        actions.grid(row=9, column=0, sticky="ew", pady=(16, 0))
-        actions.columnconfigure(0, weight=1, uniform="table_actions")
-        actions.columnconfigure(1, weight=1, uniform="table_actions")
+        actions = ttk.Frame(rules_panel, style="Card.TFrame")
+        actions.grid(row=6, column=0, sticky="ew", pady=(12, 0))
+        for col in range(3):
+            actions.columnconfigure(col, weight=1, uniform="table_actions")
         ttk.Button(actions, text="检查结构", style="Secondary.TButton", command=self.inspect_tables).grid(
             row=0, column=0, sticky="ew", padx=(0, 8)
         )
-        ttk.Button(actions, text="汇总导出", style="Primary.TButton", command=self.merge_tables).grid(
-            row=0, column=1, sticky="ew"
-        )
+        ttk.Button(actions, text="预览汇总", style="Secondary.TButton", command=self.merge_tables).grid(row=0, column=1, sticky="ew", padx=(0, 8))
+        ttk.Button(actions, text="导出汇总表", style="Primary.TButton", command=self.merge_tables).grid(row=0, column=2, sticky="ew")
 
         right = ttk.Frame(main, style="Card.TFrame", padding=(18, 16, 18, 16))
-        right.grid(row=0, column=1, sticky="nsew")
+        right.grid(row=0, column=2, sticky="nsew")
         right.columnconfigure(0, weight=1)
-        right.rowconfigure(0, weight=1)
         right.rowconfigure(1, weight=1)
 
         ttk.Label(right, text="表格预览", style="Section.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 8))
@@ -864,18 +910,19 @@ class OfficeToolGUI:
         preview_wrap.grid(row=1, column=0, sticky="nsew")
         preview_wrap.columnconfigure(0, weight=1)
         preview_wrap.rowconfigure(0, weight=1)
-        self.table_tree = ttk.Treeview(preview_wrap, columns=("A",), show="headings", height=18)
-        self.table_tree.heading("A", text="A")
-        self.table_tree.column("A", width=160, minwidth=80, stretch=True)
-        self.table_tree.grid(row=0, column=0, sticky="nsew")
-        tree_scroll = ttk.Scrollbar(preview_wrap, orient="vertical", command=self.table_tree.yview)
+        self.table_preview_canvas = tk.Canvas(preview_wrap, bg=COLOR["white"], highlightthickness=0)
+        self.table_preview_canvas.grid(row=0, column=0, sticky="nsew")
+        self.table_preview_frame = ttk.Frame(self.table_preview_canvas, style="Card.TFrame")
+        preview_window = self.table_preview_canvas.create_window((0, 0), window=self.table_preview_frame, anchor="nw")
+        tree_scroll = ttk.Scrollbar(preview_wrap, orient="vertical", command=self.table_preview_canvas.yview)
         tree_scroll.grid(row=0, column=1, sticky="ns")
-        tree_xscroll = ttk.Scrollbar(preview_wrap, orient="horizontal", command=self.table_tree.xview)
+        tree_xscroll = ttk.Scrollbar(preview_wrap, orient="horizontal", command=self.table_preview_canvas.xview)
         tree_xscroll.grid(row=1, column=0, sticky="ew")
-        self.table_tree.configure(yscrollcommand=tree_scroll.set)
-        self.table_tree.configure(xscrollcommand=tree_xscroll.set)
+        self.table_preview_canvas.configure(yscrollcommand=tree_scroll.set, xscrollcommand=tree_xscroll.set)
+        self.table_preview_frame.bind("<Configure>", lambda _e: self.table_preview_canvas.configure(scrollregion=self.table_preview_canvas.bbox("all")))
+        self.table_preview_canvas.bind("<Configure>", lambda e: self.table_preview_canvas.itemconfigure(preview_window, height=max(1, e.height)))
         self.table_tree_placeholder = tk.Label(
-            self.table_tree,
+            self.table_preview_canvas,
             text="选择主表或副表后，完整表格内容将在这里预览",
             bg=COLOR["white"],
             fg=COLOR["subtle"],
@@ -1757,6 +1804,24 @@ class OfficeToolGUI:
         for path in self.table_paths:
             prefix = "★ " if path in self.table_source_overrides else ""
             self.table_list.insert(tk.END, prefix + str(path))
+        self._refresh_table_rules_tree()
+
+    def _refresh_table_rules_tree(self) -> None:
+        if self.table_rules_tree is None:
+            return
+        for item in self.table_rules_tree.get_children():
+            self.table_rules_tree.delete(item)
+        for path, override in self.table_source_overrides.items():
+            self.table_rules_tree.insert(
+                "",
+                tk.END,
+                values=(
+                    path.name,
+                    override.get("sheet", ""),
+                    override.get("key", ""),
+                    override.get("value", ""),
+                ),
+            )
 
     def add_document_folder(self) -> None:
         folder = filedialog.askdirectory(title="选择文件夹")
@@ -2475,37 +2540,32 @@ class OfficeToolGUI:
             self.result_tree_placeholder.place(relx=0.5, rely=0.5, anchor="center")
 
     def _show_table_report(self, report) -> None:
-        self._clear_table_results()
-        self._configure_table_preview(["类型", "文件", "工作表", "位置", "内容"])
+        rows: list[list[str]] = []
         for sheet in report.sheets:
             merged = "、".join(sheet.merged_ranges[:3])
             if len(sheet.merged_ranges) > 3:
                 merged += f" 等 {len(sheet.merged_ranges)} 项"
-            self.table_tree.insert(
-                "",
-                tk.END,
-                values=(
+            rows.append(
+                [
                     "结构",
                     Path(sheet.workbook).name,
                     sheet.sheet,
                     f"表头第 {sheet.header_row} 行",
                     f"{len(sheet.headers)} 列；合并单元格：{merged or '无'}",
-                ),
+                ]
             )
 
         for finding in report.findings:
-            self.table_tree.insert(
-                "",
-                tk.END,
-                values=(
+            rows.append(
+                [
                     finding.severity,
                     Path(finding.workbook).name if finding.workbook else "",
                     finding.sheet,
                     self._table_finding_location(finding),
                     finding.message if not finding.actual else f"{finding.message}：{finding.actual}",
-                ),
+                ]
             )
-        self._refresh_table_tree_placeholder()
+        self._render_table_grid(["类型", "文件", "工作表", "位置", "内容"], rows)
 
     @staticmethod
     def _format_table_sheet_detail(sheet) -> str:
@@ -2559,25 +2619,20 @@ class OfficeToolGUI:
         return "\n".join(parts)
 
     def _clear_table_results(self) -> None:
-        for item in self.table_tree.get_children():
-            self.table_tree.delete(item)
+        if self.table_preview_frame is not None:
+            for child in self.table_preview_frame.winfo_children():
+                child.destroy()
         self.table_details.clear()
         self._refresh_table_tree_placeholder()
 
     def _refresh_table_tree_placeholder(self) -> None:
         if self.table_tree_placeholder is None:
             return
-        if self.table_tree.get_children():
+        has_content = self.table_preview_frame is not None and bool(self.table_preview_frame.winfo_children())
+        if has_content:
             self.table_tree_placeholder.place_forget()
         else:
             self.table_tree_placeholder.place(relx=0.5, rely=0.5, anchor="center")
-
-    def _configure_table_preview(self, columns: list[str]) -> None:
-        keys = [f"c{index}" for index in range(len(columns))]
-        self.table_tree.configure(columns=keys, show="headings")
-        for key, label in zip(keys, columns):
-            self.table_tree.heading(key, text=label)
-            self.table_tree.column(key, width=max(90, min(220, len(label) * 18)), minwidth=70, stretch=True)
 
     def _preview_table_path(self, path: Path, sheet_name: str | None = None) -> None:
         try:
@@ -2585,16 +2640,65 @@ class OfficeToolGUI:
                 self._load_table_workbook_info(path)
             infos = self.table_workbook_infos.get(path.resolve()) or []
             sheet = sheet_name or (infos[0].sheet if infos else _first_sheet_name(path))
+            header_row = next((info.header_row for info in infos if info.sheet == sheet), None)
             columns, rows = read_sheet_preview(path, sheet)
-            self._clear_table_results()
-            self._configure_table_preview(["行号", *columns])
-            for index, row_values in enumerate(rows, start=1):
-                self.table_tree.insert("", tk.END, values=[index, *row_values])
-            self._refresh_table_tree_placeholder()
+            self._render_table_grid(
+                ["行号", *columns],
+                [[str(index), *row_values] for index, row_values in enumerate(rows, start=1)],
+                header_row_index=header_row,
+            )
             self.status_text.set(f"正在预览：{path.name} / {sheet}")
         except Exception as exc:
             self.status_text.set("表格预览失败")
             messagebox.showerror("表格预览失败", str(exc))
+
+    def _render_table_grid(self, headers: list[str], rows: list[list[str]], header_row_index: int | None = None) -> None:
+        self._clear_table_results()
+        if self.table_preview_frame is None:
+            return
+        visible_headers = headers[:51]
+        for column, header in enumerate(visible_headers):
+            self._grid_cell(self.table_preview_frame, 0, column, header, header=True, width=self._preview_column_width(column, header))
+        for row_index, row_values in enumerate(rows[:80], start=1):
+            is_header_row = header_row_index is not None and row_index == header_row_index
+            values = row_values[: len(visible_headers)]
+            for column in range(len(visible_headers)):
+                value = values[column] if column < len(values) else ""
+                self._grid_cell(
+                    self.table_preview_frame,
+                    row_index,
+                    column,
+                    value,
+                    header=is_header_row or column == 0,
+                    width=self._preview_column_width(column, value),
+                )
+        self._refresh_table_tree_placeholder()
+
+    @staticmethod
+    def _preview_column_width(column: int, text: str) -> int:
+        if column == 0:
+            return 7
+        return max(10, min(24, len(str(text)) + 4))
+
+    @staticmethod
+    def _grid_cell(parent: tk.Widget, row: int, column: int, text: str, *, header: bool = False, width: int = 12) -> None:
+        bg = COLOR["surface_alt"] if header else COLOR["white"]
+        fg = COLOR["accent"] if header else COLOR["text"]
+        label = tk.Label(
+            parent,
+            text=str(text),
+            bg=bg,
+            fg=fg,
+            width=width,
+            height=1,
+            anchor="w",
+            padx=6,
+            pady=4,
+            relief="solid",
+            bd=1,
+            font=(FONT_FAMILY, 9, "bold" if header else "normal"),
+        )
+        label.grid(row=row, column=column, sticky="nsew")
 
 
 def main() -> int:
