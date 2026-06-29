@@ -16,7 +16,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from .ai import DeepSeekTextReviewer
 from .config import AIReviewOptions, OfficeToolConfig
 from .services import audit_many, format_many, summarize_results
-from .table_audit import TableWorkbookInspector, collect_table_inputs, inspect_workbook, read_sheet_preview
+from .table_audit import TableWorkbookInspector, _load_workbook, collect_table_inputs, inspect_workbook, read_sheet_preview
 from .table_merge import merge_by_columns, merge_same_layout
 from .table_models import SourceColumnMapping, TableMergeOptions
 from .profile_store import ConfigProfileStore
@@ -386,6 +386,8 @@ class OfficeToolGUI:
         self.table_selected_source_sheet = tk.StringVar()
         self.table_selected_source_key_column = tk.StringVar()
         self.table_selected_source_value_column = tk.StringVar()
+        self.table_fuzzy_enabled = tk.BooleanVar(value=False)
+        self.table_fuzzy_threshold = tk.IntVar(value=90)
         self.table_output_file = tk.StringVar()
         self.status_text = tk.StringVar(value="就绪")
         self.ai_enabled = tk.BooleanVar(value=False)
@@ -764,9 +766,8 @@ class OfficeToolGUI:
         source_panel.columnconfigure(0, weight=1)
         source_panel.rowconfigure(1, weight=1)
 
-        ttk.Label(source_panel, text="表格文件", style="Section.TLabel").grid(row=0, column=0, sticky="w")
         list_wrap = ttk.Frame(source_panel, style="Tint.TFrame", padding=1)
-        list_wrap.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
+        list_wrap.grid(row=1, column=0, sticky="nsew", pady=(0, 0))
         list_wrap.columnconfigure(0, weight=1)
         list_wrap.rowconfigure(0, weight=1)
         self.table_list = tk.Listbox(list_wrap, activestyle="none", exportselection=False)
@@ -785,32 +786,34 @@ class OfficeToolGUI:
         self.table_list.bind("<<ListboxSelect>>", self._on_table_source_selected)
 
         source_tools = ttk.Frame(source_panel, style="Toolbar.TFrame")
-        source_tools.grid(row=2, column=0, sticky="ew", pady=(12, 0))
+        source_tools.grid(row=0, column=0, sticky="ew", pady=(0, 12))
         for column in range(2):
             source_tools.columnconfigure(column, weight=1, uniform="source_tools")
         for index, (text, command) in enumerate([
-            ("导入表格", self.add_table_files),
+            ("添加文件", self.add_table_files),
+            ("添加文件夹", self.add_table_folder),
+            ("移除选中", self.remove_selected_tables),
             ("清空列表", self.clear_tables),
         ]):
             ttk.Button(source_tools, text=text, style="Workbench.TButton", command=command).grid(
-                row=0,
-                column=index,
+                row=index // 2,
+                column=index % 2,
                 sticky="ew",
                 padx=(0, 6) if index % 2 == 0 else (6, 0),
+                pady=(0, 6) if index < 2 else (0, 0),
             )
 
         rules_panel = ttk.Frame(main, style="Card.TFrame", padding=(18, 16, 18, 16))
         rules_panel.grid(row=0, column=1, sticky="nsew", padx=(0, 12))
         rules_panel.columnconfigure(0, weight=1)
         rules_panel.rowconfigure(2, weight=1)
-        ttk.Label(rules_panel, text="汇总设置", style="Section.TLabel").grid(row=0, column=0, sticky="w")
 
         role = ttk.Frame(rules_panel, style="Tint.TFrame", padding=(12, 10))
-        role.grid(row=1, column=0, sticky="ew", pady=(10, 12))
+        role.grid(row=0, column=0, sticky="ew", pady=(0, 12))
         for column in range(2):
             role.columnconfigure(column, weight=1, uniform="table_top_actions")
-        ttk.Button(role, text="设为主表", style="Secondary.TButton", command=self.use_selected_table_as_master).grid(row=0, column=0, sticky="ew", padx=(0, 6))
-        ttk.Button(role, text="一键汇总", style="Secondary.TButton", command=self.merge_same_layout_tables).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        ttk.Button(role, text="设为主表", style="Workbench.TButton", command=self.use_selected_table_as_master).grid(row=0, column=0, sticky="ew", padx=(0, 10))
+        ttk.Button(role, text="一键汇总", style="Workbench.TButton", command=self.merge_same_layout_tables).grid(row=0, column=1, sticky="ew", padx=(10, 0))
 
         settings = ttk.Frame(rules_panel, style="Tint.TFrame", padding=(1, 1))
         settings.grid(row=2, column=0, sticky="nsew")
@@ -862,21 +865,35 @@ class OfficeToolGUI:
             ("预览汇总", self.preview_table_merge),
             ("导出汇总", self.export_table_merge),
         ]):
-            ttk.Button(actions, text=text, style="Secondary.TButton", command=command).grid(
-                row=0,
-                column=index,
+            ttk.Button(actions, text=text, style="Workbench.TButton", command=command).grid(
+                row=index // 2,
+                column=index % 2,
                 sticky="ew",
-                padx=(0, 6) if index < 3 else (0, 0),
+                padx=(0, 6) if index % 2 == 0 else (6, 0),
+                pady=(0, 6) if index < 2 else (0, 0),
             )
+
+        fuzzy = ttk.Frame(settings, style="Card.TFrame", padding=(10, 8))
+        fuzzy.grid(row=3, column=0, sticky="ew")
+        fuzzy.columnconfigure(1, weight=1)
+        ttk.Checkbutton(fuzzy, text="模糊匹配", variable=self.table_fuzzy_enabled).grid(row=0, column=0, sticky="w", padx=(0, 10))
+        ttk.Scale(
+            fuzzy,
+            from_=60,
+            to=100,
+            variable=self.table_fuzzy_threshold,
+            orient="horizontal",
+            command=lambda value: self.table_fuzzy_threshold.set(int(float(value))),
+        ).grid(row=0, column=1, sticky="ew", padx=(0, 10))
+        ttk.Label(fuzzy, textvariable=self.table_fuzzy_threshold, style="Card.TLabel", width=4).grid(row=0, column=2, sticky="e")
 
         right = ttk.Frame(main, style="Card.TFrame", padding=(18, 16, 18, 16))
         right.grid(row=0, column=2, sticky="nsew")
         right.columnconfigure(0, weight=1)
-        right.rowconfigure(1, weight=1)
+        right.rowconfigure(0, weight=1)
 
-        ttk.Label(right, text="表格预览", style="Section.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 8))
         preview_wrap = ttk.Frame(right, style="Tint.TFrame", padding=1)
-        preview_wrap.grid(row=1, column=0, sticky="nsew")
+        preview_wrap.grid(row=0, column=0, sticky="nsew")
         preview_wrap.columnconfigure(0, weight=1)
         preview_wrap.rowconfigure(0, weight=1)
         self.table_preview_canvas = tk.Canvas(preview_wrap, bg=COLOR["white"], highlightthickness=0)
@@ -1685,6 +1702,8 @@ class OfficeToolGUI:
                         master_key_column=master_key,
                         master_target_column=master_target,
                         sources=sources,
+                        fuzzy_match=self.table_fuzzy_enabled.get(),
+                        fuzzy_threshold=self.table_fuzzy_threshold.get(),
                     )
                 )
 
@@ -2822,28 +2841,62 @@ class OfficeToolGUI:
             sheet = sheet_name or (infos[0].sheet if infos else _first_sheet_name(path))
             header_row = next((info.header_row for info in infos if info.sheet == sheet), None)
             columns, rows = read_sheet_preview(path, sheet)
+            merged_ranges = self._preview_merged_ranges(path, sheet)
             self._render_table_grid(
                 ["行号", *columns],
                 [[str(index), *row_values] for index, row_values in enumerate(rows, start=1)],
                 header_row_index=header_row,
+                merged_ranges=merged_ranges,
             )
             self.status_text.set(f"正在预览：{path.name} / {sheet}")
         except Exception as exc:
             self.status_text.set("表格预览失败")
             messagebox.showerror("表格预览失败", str(exc))
 
-    def _render_table_grid(self, headers: list[str], rows: list[list[str]], header_row_index: int | None = None) -> None:
+    def _preview_merged_ranges(self, path: Path, sheet_name: str) -> list[tuple[int, int, int, int]]:
+        workbook = _load_workbook(path, data_only=False)
+        if sheet_name not in workbook.sheetnames:
+            return []
+        sheet = workbook[sheet_name]
+        ranges: list[tuple[int, int, int, int]] = []
+        for merged in sheet.merged_cells.ranges:
+            min_col, min_row, max_col, max_row = merged.bounds
+            if min_row > 80 or min_col > 50:
+                continue
+            ranges.append((min_row, min_col + 1, min(max_row, 80), min(max_col + 1, 51)))
+        return ranges
+
+    def _render_table_grid(
+        self,
+        headers: list[str],
+        rows: list[list[str]],
+        header_row_index: int | None = None,
+        merged_ranges: list[tuple[int, int, int, int]] | None = None,
+    ) -> None:
         self._clear_table_results()
         if self.table_preview_frame is None:
             return
         visible_headers = headers[:51]
         for column, header in enumerate(visible_headers):
             self._grid_cell(self.table_preview_frame, 0, column, header, header=True, width=self._preview_column_width(column, header))
+        merged_lookup: dict[tuple[int, int], tuple[int, int]] = {}
+        covered_cells: set[tuple[int, int]] = set()
+        for min_row, min_col, max_row, max_col in merged_ranges or []:
+            if max_row <= min_row and max_col <= min_col:
+                continue
+            merged_lookup[(min_row, min_col)] = (max_row - min_row + 1, max_col - min_col + 1)
+            for row in range(min_row, max_row + 1):
+                for column in range(min_col, max_col + 1):
+                    if (row, column) != (min_row, min_col):
+                        covered_cells.add((row, column))
         for row_index, row_values in enumerate(rows[:80], start=1):
             is_header_row = header_row_index is not None and row_index == header_row_index
             values = row_values[: len(visible_headers)]
             for column in range(len(visible_headers)):
+                if (row_index, column) in covered_cells:
+                    continue
                 value = values[column] if column < len(values) else ""
+                rowspan, columnspan = merged_lookup.get((row_index, column), (1, 1))
                 self._grid_cell(
                     self.table_preview_frame,
                     row_index,
@@ -2851,6 +2904,8 @@ class OfficeToolGUI:
                     value,
                     header=is_header_row or column == 0,
                     width=self._preview_column_width(column, value),
+                    rowspan=rowspan,
+                    columnspan=columnspan,
                 )
         self._refresh_table_tree_placeholder()
 
@@ -2861,7 +2916,17 @@ class OfficeToolGUI:
         return max(12, min(42, len(str(text)) + 4))
 
     @staticmethod
-    def _grid_cell(parent: tk.Widget, row: int, column: int, text: str, *, header: bool = False, width: int = 12) -> None:
+    def _grid_cell(
+        parent: tk.Widget,
+        row: int,
+        column: int,
+        text: str,
+        *,
+        header: bool = False,
+        width: int = 12,
+        rowspan: int = 1,
+        columnspan: int = 1,
+    ) -> None:
         bg = COLOR["surface_alt"] if header else COLOR["white"]
         fg = COLOR["accent"] if header else COLOR["text"]
         label = tk.Label(
@@ -2879,7 +2944,7 @@ class OfficeToolGUI:
             wraplength=max(90, min(360, width * 9)),
             font=(FONT_FAMILY, 9, "bold" if header else "normal"),
         )
-        label.grid(row=row, column=column, sticky="nsew")
+        label.grid(row=row, column=column, rowspan=rowspan, columnspan=columnspan, sticky="nsew")
 
 
 def main() -> int:

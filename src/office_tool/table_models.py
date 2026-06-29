@@ -108,4 +108,6 @@ class TableMergeOptions:
     sources: list[SourceColumnMapping]
     master_header_row: int | None = None
     normalize_keys: bool = True
+    fuzzy_match: bool = False
+    fuzzy_threshold: int = 90
     separator: str = "\n"

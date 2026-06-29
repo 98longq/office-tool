@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -47,6 +48,9 @@ def merge_by_columns(options: TableMergeOptions) -> TableReport:
     )
 
     source_values = _collect_source_values(options, report)
+    match_plan = _build_key_match_plan(master_ws, master_header_row, master_key_col, source_values, options, report)
+    if report.count("error"):
+        raise ValueError("模糊匹配存在一对多或多对一歧义，请调整匹配度或关闭模糊匹配后重试。")
     used_source_keys: set[tuple[str, str, int]] = set()
     for row in range(master_header_row + 1, master_ws.max_row + 1):
         key = normalized_cell_text(master_ws.cell(row, master_key_col).value, options.normalize_keys)
@@ -61,7 +65,7 @@ def merge_by_columns(options: TableMergeOptions) -> TableReport:
                 column=master_key_col,
             )
             continue
-        matches = source_values.get(key, [])
+        matches = match_plan.get(row, [])
         if not matches:
             report.add_finding(
                 "unmatched_master_key",
@@ -115,6 +119,109 @@ def merge_by_columns(options: TableMergeOptions) -> TableReport:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     master_wb.save(output_path)
     return report
+
+
+def _build_key_match_plan(
+    master_ws: "Worksheet",
+    master_header_row: int,
+    master_key_col: int,
+    source_values: dict[str, list[SourceValue]],
+    options: TableMergeOptions,
+    report: TableReport,
+) -> dict[int, list[SourceValue]]:
+    if not options.fuzzy_match:
+        plan: dict[int, list[SourceValue]] = {}
+        for row in range(master_header_row + 1, master_ws.max_row + 1):
+            key = normalized_cell_text(master_ws.cell(row, master_key_col).value, options.normalize_keys)
+            if key:
+                plan[row] = source_values.get(key, [])
+        return plan
+
+    threshold = max(0, min(100, int(options.fuzzy_threshold)))
+    master_keys: dict[int, str] = {}
+    best_by_row: dict[int, tuple[str, float]] = {}
+    rows_by_source_key: dict[str, list[int]] = {}
+    for row in range(master_header_row + 1, master_ws.max_row + 1):
+        key = normalized_cell_text(master_ws.cell(row, master_key_col).value, options.normalize_keys)
+        if not key:
+            continue
+        master_keys[row] = key
+        candidates: list[tuple[str, float]] = []
+        for source_key in source_values:
+            score = _similarity_score(key, source_key)
+            if score >= threshold:
+                candidates.append((source_key, score))
+        if not candidates:
+            continue
+        candidates.sort(key=lambda item: item[1], reverse=True)
+        top_score = candidates[0][1]
+        top_keys = [item[0] for item in candidates if item[1] == top_score]
+        if len(top_keys) > 1:
+            report.add_finding(
+                "ambiguous_fuzzy_match",
+                "error",
+                "模糊匹配出现一对多候选，已停止汇总。",
+                sheet=master_ws.title,
+                row=row,
+                column=master_key_col,
+                actual=key,
+                suggestion="提高匹配度，或手动统一主表和副表校验文字。",
+            )
+            continue
+        source_key = top_keys[0]
+        if len(source_values.get(source_key, [])) > 1:
+            report.add_finding(
+                "ambiguous_fuzzy_match",
+                "error",
+                "模糊匹配命中多条副表数据，已停止汇总。",
+                sheet=master_ws.title,
+                row=row,
+                column=master_key_col,
+                actual=f"{key} ≈ {source_key}",
+                suggestion="提高匹配度，或先处理副表重复校验值。",
+            )
+            continue
+        best_by_row[row] = (source_key, top_score)
+        rows_by_source_key.setdefault(source_key, []).append(row)
+
+    for source_key, rows in rows_by_source_key.items():
+        if len(rows) <= 1:
+            continue
+        report.add_finding(
+            "ambiguous_fuzzy_match",
+            "error",
+            "模糊匹配出现多对一候选，已停止汇总。",
+            sheet=master_ws.title,
+            actual=source_key,
+            suggestion="提高匹配度，或手动统一主表和副表校验文字。",
+        )
+
+    if report.count("error"):
+        return {}
+
+    plan: dict[int, list[SourceValue]] = {}
+    for row, (source_key, score) in best_by_row.items():
+        plan[row] = source_values.get(source_key, [])
+        if master_keys[row] != source_key:
+            report.add_finding(
+                "fuzzy_key_match",
+                "info",
+                "已使用模糊匹配关联主表和副表校验值。",
+                sheet=master_ws.title,
+                row=row,
+                column=master_key_col,
+                actual=f"{master_keys[row]} ≈ {source_key} ({score:.0f}%)",
+            )
+    return plan
+
+
+def _similarity_score(left: str, right: str) -> float:
+    if not left or not right:
+        return 0.0
+    ratio = SequenceMatcher(None, left, right).ratio()
+    if left in right or right in left:
+        ratio = max(ratio, min(len(left), len(right)) / max(len(left), len(right)))
+    return ratio * 100
 
 
 def merge_same_layout(

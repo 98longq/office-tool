@@ -134,6 +134,81 @@ class TableModuleTests(unittest.TestCase):
         self.assertEqual(sheet["B3"].value, "B 已反馈")
         self.assertEqual(report.stats["updated_cells"], 2)
 
+    def test_merge_by_columns_supports_fuzzy_key_matching(self):
+        with tempfile.TemporaryDirectory(prefix="office_tool_table_fuzzy_") as tmp:
+            root = Path(tmp)
+            master = root / "master.xlsx"
+            source = root / "source.xlsx"
+            output = root / "merged.xlsx"
+
+            master_wb = Workbook()
+            master_ws = master_wb.active
+            master_ws.title = "总表"
+            master_ws.append(["任务", "办理情况"])
+            master_ws.append(["完成办公楼消防检查", ""])
+            master_wb.save(master)
+
+            source_wb = Workbook()
+            source_ws = source_wb.active
+            source_ws.title = "部门"
+            source_ws.append(["下达任务", "回复"])
+            source_ws.append(["请于本周完成办公楼消防检查并反馈", "已完成"])
+            source_wb.save(source)
+
+            report = merge_by_columns(
+                TableMergeOptions(
+                    master_path=master,
+                    output_path=output,
+                    master_sheet="总表",
+                    master_key_column="任务",
+                    master_target_column="办理情况",
+                    sources=[SourceColumnMapping(source, "部门", "下达任务", "回复")],
+                    fuzzy_match=True,
+                    fuzzy_threshold=60,
+                )
+            )
+            merged = load_workbook(output)
+
+        self.assertEqual(merged["总表"]["B2"].value, "已完成")
+        self.assertEqual(report.stats["updated_cells"], 1)
+        self.assertEqual(report.count("error"), 0)
+
+    def test_merge_by_columns_blocks_ambiguous_fuzzy_matches(self):
+        with tempfile.TemporaryDirectory(prefix="office_tool_table_fuzzy_ambiguous_") as tmp:
+            root = Path(tmp)
+            master = root / "master.xlsx"
+            source = root / "source.xlsx"
+            output = root / "merged.xlsx"
+
+            master_wb = Workbook()
+            master_ws = master_wb.active
+            master_ws.title = "总表"
+            master_ws.append(["任务", "办理情况"])
+            master_ws.append(["任务一", ""])
+            master_ws.append(["任务二", ""])
+            master_wb.save(master)
+
+            source_wb = Workbook()
+            source_ws = source_wb.active
+            source_ws.title = "部门"
+            source_ws.append(["任务", "回复"])
+            source_ws.append(["任务", "已反馈"])
+            source_wb.save(source)
+
+            with self.assertRaises(ValueError):
+                merge_by_columns(
+                    TableMergeOptions(
+                        master_path=master,
+                        output_path=output,
+                        master_sheet="总表",
+                        master_key_column="任务",
+                        master_target_column="办理情况",
+                        sources=[SourceColumnMapping(source, "部门", "任务", "回复")],
+                        fuzzy_match=True,
+                        fuzzy_threshold=60,
+                    )
+                )
+
     def test_merge_same_layout_appends_by_cell_position(self):
         with tempfile.TemporaryDirectory(prefix="office_tool_table_same_layout_") as tmp:
             root = Path(tmp)
