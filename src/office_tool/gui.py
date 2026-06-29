@@ -762,18 +762,11 @@ class OfficeToolGUI:
         source_panel = ttk.Frame(main, style="Card.TFrame", padding=(18, 16, 18, 16))
         source_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
         source_panel.columnconfigure(0, weight=1)
-        source_panel.rowconfigure(3, weight=1)
+        source_panel.rowconfigure(1, weight=1)
 
-        ttk.Label(source_panel, text="数据源", style="Section.TLabel").grid(row=0, column=0, sticky="w")
-        master = ttk.Frame(source_panel, style="Card.TFrame")
-        master.grid(row=1, column=0, sticky="ew", pady=(10, 14))
-        master.columnconfigure(1, weight=1)
-        ttk.Button(master, text="选择主表", style="Primary.TButton", command=self.choose_table_master).grid(row=0, column=0, sticky="ew", padx=(0, 8))
-        ttk.Entry(master, textvariable=self.table_master_file).grid(row=0, column=1, sticky="ew")
-
-        ttk.Label(source_panel, text="副表", style="Section.TLabel").grid(row=2, column=0, sticky="w")
+        ttk.Label(source_panel, text="表格文件", style="Section.TLabel").grid(row=0, column=0, sticky="w")
         list_wrap = ttk.Frame(source_panel, style="Tint.TFrame", padding=1)
-        list_wrap.grid(row=3, column=0, sticky="nsew", pady=(10, 0))
+        list_wrap.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
         list_wrap.columnconfigure(0, weight=1)
         list_wrap.rowconfigure(0, weight=1)
         self.table_list = tk.Listbox(list_wrap, activestyle="none", exportselection=False)
@@ -783,7 +776,7 @@ class OfficeToolGUI:
         self.table_list.configure(yscrollcommand=table_scroll.set)
         self.table_list_placeholder = tk.Label(
             self.table_list,
-            text="添加一个或多个副表文件",
+            text="导入主表和副表文件",
             bg=COLOR["white"],
             fg=COLOR["subtle"],
             font=(FONT_FAMILY, 9),
@@ -792,38 +785,43 @@ class OfficeToolGUI:
         self.table_list.bind("<<ListboxSelect>>", self._on_table_source_selected)
 
         source_tools = ttk.Frame(source_panel, style="Toolbar.TFrame")
-        source_tools.grid(row=4, column=0, sticky="ew", pady=(12, 0))
+        source_tools.grid(row=2, column=0, sticky="ew", pady=(12, 0))
         for column in range(2):
             source_tools.columnconfigure(column, weight=1, uniform="source_tools")
         for index, (text, command) in enumerate([
-            ("添加副表", self.add_table_files),
-            ("添加文件夹", self.add_table_folder),
-            ("移除副表", self.remove_selected_tables),
-            ("清空副表", self.clear_tables),
+            ("导入表格", self.add_table_files),
+            ("删除选中", self.remove_selected_tables),
         ]):
             ttk.Button(source_tools, text=text, style="Workbench.TButton", command=command).grid(
-                row=index // 2,
-                column=index % 2,
+                row=0,
+                column=index,
                 sticky="ew",
                 padx=(0, 6) if index % 2 == 0 else (6, 0),
-                pady=(0, 6) if index < 2 else (0, 0),
             )
 
         rules_panel = ttk.Frame(main, style="Card.TFrame", padding=(18, 16, 18, 16))
         rules_panel.grid(row=0, column=1, sticky="nsew", padx=(0, 12))
         rules_panel.columnconfigure(0, weight=1)
-        rules_panel.rowconfigure(2, weight=1)
-        ttk.Label(rules_panel, text="操作", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        rules_panel.rowconfigure(3, weight=1)
+        ttk.Label(rules_panel, text="汇总设置", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+
+        role = ttk.Frame(rules_panel, style="Tint.TFrame", padding=(12, 10))
+        role.grid(row=1, column=0, sticky="ew", pady=(10, 12))
+        role.columnconfigure(1, weight=1)
+        ttk.Button(role, text="选中作为主表", style="Primary.TButton", command=self.use_selected_table_as_master).grid(row=0, column=0, sticky="ew", padx=(0, 8), pady=(0, 8))
+        ttk.Entry(role, textvariable=self.table_master_file).grid(row=0, column=1, sticky="ew", pady=(0, 8))
+        ttk.Button(role, text="另选主表", style="Secondary.TButton", command=self.choose_table_master).grid(row=1, column=0, sticky="ew", padx=(0, 8))
+        ttk.Label(role, text="副表：左侧列表中除主表外的表格", style="TintMuted.TLabel").grid(row=1, column=1, sticky="w")
 
         quick = ttk.Frame(rules_panel, style="Tint.TFrame", padding=(12, 10))
-        quick.grid(row=1, column=0, sticky="ew", pady=(10, 12))
+        quick.grid(row=2, column=0, sticky="ew", pady=(0, 12))
         quick.columnconfigure(0, weight=1)
         ttk.Button(quick, text="一键同格式汇总", style="Primary.TButton", command=self.merge_same_layout_tables).grid(row=0, column=0, sticky="ew", pady=(0, 8))
         ttk.Button(quick, text="检查结构", style="Secondary.TButton", command=self.inspect_tables).grid(row=1, column=0, sticky="ew", pady=(0, 8))
         ttk.Button(quick, textvariable=self.table_advanced_button_text, style="Subtle.TButton", command=self.toggle_table_advanced).grid(row=2, column=0, sticky="ew")
 
         self.table_advanced_frame = ttk.Frame(rules_panel, style="Card.TFrame")
-        self.table_advanced_frame.grid(row=2, column=0, sticky="nsew")
+        self.table_advanced_frame.grid(row=3, column=0, sticky="nsew")
         self.table_advanced_frame.columnconfigure(0, weight=1)
         self.table_advanced_frame.rowconfigure(3, weight=1)
         self.table_advanced_frame.grid_remove()
@@ -899,12 +897,6 @@ class OfficeToolGUI:
         rules_scroll = ttk.Scrollbar(special, orient="vertical", command=self.table_rules_tree.yview)
         rules_scroll.grid(row=0, column=1, sticky="ns")
         self.table_rules_tree.configure(yscrollcommand=rules_scroll.set)
-
-        output = ttk.Frame(rules_panel, style="Card.TFrame")
-        output.grid(row=3, column=0, sticky="ew", pady=(12, 0))
-        output.columnconfigure(1, weight=1)
-        ttk.Button(output, text="导出位置", style="Secondary.TButton", command=self.choose_table_output).grid(row=0, column=0, sticky="ew", padx=(0, 10))
-        ttk.Entry(output, textvariable=self.table_output_file).grid(row=0, column=1, sticky="ew")
 
         actions = ttk.Frame(self.table_advanced_frame, style="Card.TFrame")
         actions.grid(row=4, column=0, sticky="ew", pady=(12, 0))
@@ -1494,11 +1486,12 @@ class OfficeToolGUI:
         self.table_output_file.set(str(self.table_master_path.with_name(f"{self.table_master_path.stem}_汇总结果.xlsx")))
         self._load_table_workbook_info(self.table_master_path)
         self._refresh_master_table_choices()
+        self._refresh_table_source_list_labels()
         self._preview_table_path(self.table_master_path, self.table_master_sheet.get().strip() or None)
         self.status_text.set("已选择主表")
 
     def add_table_files(self) -> None:
-        paths = filedialog.askopenfilenames(title="选择副表文件", filetypes=[("Excel 工作簿", "*.xlsx"), ("所有文件", "*.*")])
+        paths = filedialog.askopenfilenames(title="选择表格文件", filetypes=[("Excel 工作簿", "*.xlsx"), ("所有文件", "*.*")])
         self._add_table_paths(paths)
 
     def add_table_folder(self) -> None:
@@ -1515,14 +1508,35 @@ class OfficeToolGUI:
                 self._load_table_workbook_info(path)
         self._refresh_table_placeholder()
         self._refresh_default_source_choices()
+        self._refresh_table_source_list_labels()
         if paths:
             self.status_text.set(f"表格队列中 {len(self.table_paths)} 个路径")
+
+    def use_selected_table_as_master(self) -> None:
+        selection = self.table_list.curselection()
+        if not selection:
+            messagebox.showwarning("选择主表", "请先在左侧列表中选中一张表。")
+            return
+        path = self.table_paths[selection[0]].resolve()
+        self.table_master_path = path
+        self.table_master_file.set(str(path))
+        self.table_output_file.set(str(path.with_name(f"{path.stem}_汇总结果.xlsx")))
+        self._load_table_workbook_info(path)
+        self._refresh_master_table_choices()
+        self._refresh_default_source_choices()
+        self._refresh_table_source_list_labels()
+        self._preview_table_path(path, self.table_master_sheet.get().strip() or None)
+        self.status_text.set("已将选中表格设为主表")
 
     def remove_selected_tables(self) -> None:
         for index in reversed(list(self.table_list.curselection())):
             path = self.table_paths[index]
             self.table_list.delete(index)
             self.table_source_overrides.pop(path, None)
+            if self.table_master_path is not None and path.resolve() == self.table_master_path.resolve():
+                self.table_master_path = None
+                self.table_master_file.set("")
+                self.table_output_file.set("")
             del self.table_paths[index]
         self.table_selected_source_path = None
         self._clear_selected_source_form()
@@ -1613,7 +1627,7 @@ class OfficeToolGUI:
     def merge_same_layout_tables(self) -> None:
         try:
             master_path = self._table_master_path_from_form()
-            source_paths = collect_table_inputs(self.table_paths)
+            source_paths = self._table_source_paths()
             output_path = self._table_output_path(master_path)
             self._clear_table_results()
             self.status_text.set("正在同格式汇总...")
@@ -1639,7 +1653,7 @@ class OfficeToolGUI:
     def merge_tables(self) -> None:
         try:
             master_path = self._table_master_path_from_form()
-            source_paths = collect_table_inputs(self.table_paths)
+            source_paths = self._table_source_paths()
             output_path = self._table_output_path(master_path)
             master_sheet = self.table_master_sheet.get().strip()
             master_key = self.table_master_key_column.get().strip()
@@ -1693,11 +1707,21 @@ class OfficeToolGUI:
         master_path = self._table_master_path_from_form(required=False)
         if master_path is not None:
             paths.append(master_path)
-        if self.table_paths:
-            paths.extend(collect_table_inputs(self.table_paths))
+        source_paths = self._table_source_paths(required=False)
+        if source_paths:
+            paths.extend(source_paths)
         if not paths:
             raise ValueError("请先选择主表，或添加副表文件。")
         return paths
+
+    def _table_source_paths(self, *, required: bool = True) -> list[Path]:
+        master = self._table_master_path_from_form(required=False)
+        source_paths = collect_table_inputs(self.table_paths)
+        if master is not None:
+            source_paths = [path for path in source_paths if path.resolve() != master.resolve()]
+        if required and not source_paths:
+            raise ValueError("请先在左侧导入副表文件。")
+        return source_paths
 
     def _table_master_path_from_form(self, required: bool = True) -> Path | None:
         raw = self.table_master_file.get().strip()
@@ -1742,7 +1766,7 @@ class OfficeToolGUI:
     def _refresh_default_source_choices(self) -> None:
         sheet_names: list[str] = []
         headers: list[str] = []
-        for path in self.table_paths:
+        for path in self._table_source_paths(required=False):
             infos = self.table_workbook_infos.get(path.resolve()) or []
             for info in infos:
                 if info.sheet not in sheet_names:
@@ -1851,8 +1875,14 @@ class OfficeToolGUI:
 
     def _refresh_table_source_list_labels(self) -> None:
         self.table_list.delete(0, tk.END)
+        master = self.table_master_path.resolve() if self.table_master_path is not None else None
         for path in self.table_paths:
-            prefix = "★ " if path in self.table_source_overrides else ""
+            markers: list[str] = []
+            if master is not None and path.resolve() == master:
+                markers.append("主表")
+            if path in self.table_source_overrides:
+                markers.append("特殊")
+            prefix = f"[{'/'.join(markers)}] " if markers else ""
             self.table_list.insert(tk.END, prefix + str(path))
         self._refresh_table_rules_tree()
 
