@@ -756,9 +756,9 @@ class OfficeToolGUI:
         merge_page.rowconfigure(0, weight=1)
         main = ttk.Frame(merge_page, style="TFrame")
         main.grid(row=0, column=0, sticky="nsew", pady=(12, 0))
-        main.columnconfigure(0, weight=3, uniform="table")
-        main.columnconfigure(1, weight=4, uniform="table")
-        main.columnconfigure(2, weight=6, uniform="table")
+        main.columnconfigure(0, weight=4, uniform="table")
+        main.columnconfigure(1, weight=5, uniform="table")
+        main.columnconfigure(2, weight=4, uniform="table")
         main.rowconfigure(0, weight=1)
 
         source_panel = ttk.Frame(main, style="Card.TFrame", padding=(18, 16, 18, 16))
