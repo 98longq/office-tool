@@ -249,6 +249,7 @@ def merge_same_layout(
     report.stats["appended_rows"] = 0
     report.stats["skipped_formula_cells"] = 0
     report.stats["layout_warnings"] = 0
+    report.stats["blank_cells_preserved"] = 0
     header_row = detect_header_row(master_ws)
     master_headers = headers_for_row(master_ws, header_row)
     master_merged_ranges = _merged_range_texts(master_ws)
@@ -256,6 +257,15 @@ def merge_same_layout(
     template_max_col = master_ws.max_column
     append_rows_mode = not _sheet_has_data_below_header(master_ws, header_row)
     report.stats["merge_mode"] = "append_rows" if append_rows_mode else "cell_position"
+    if not append_rows_mode:
+        report.add_finding(
+            "master_has_existing_rows",
+            "info",
+            "主表表头下已有内容，已按固定行同位置模式汇总。",
+            workbook=master_path,
+            sheet=master_ws.title,
+            suggestion="如果希望收集所有副表明细行，请使用只有表头的空模板作为主表。",
+        )
     report.sheets.append(_sheet_info(str(master_path), master_ws, header_row, master_headers))
 
     for raw_source in source_paths:
@@ -374,6 +384,8 @@ def _append_source_row(master_ws: "Worksheet", source_ws: "Worksheet", source_ro
             report.stats["skipped_formula_cells"] += 1
             continue
         target_cell = master_ws.cell(target_row, column)
+        if source_cell.value is None or str(source_cell.value) == "":
+            report.stats["blank_cells_preserved"] = int(report.stats.get("blank_cells_preserved", 0)) + 1
         target_cell.value = source_cell.value
         if source_cell.has_style:
             target_cell._style = copy(source_cell._style)

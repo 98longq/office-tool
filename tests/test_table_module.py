@@ -374,6 +374,69 @@ class TableModuleTests(unittest.TestCase):
         self.assertEqual(report.stats["merge_mode"], "append_rows")
         self.assertEqual(report.stats["appended_rows"], 8)
 
+    def test_merge_same_layout_keeps_blank_cells_when_collecting_rows(self):
+        with tempfile.TemporaryDirectory(prefix="office_tool_table_one_click_blanks_") as tmp:
+            root = Path(tmp)
+            master = root / "template.xlsx"
+            source = root / "source.xlsx"
+            output = root / "merged.xlsx"
+
+            master_wb = Workbook()
+            master_ws = master_wb.active
+            master_ws.title = "汇总表"
+            master_ws.append(["部门", "事项", "办理情况", "备注"])
+            master_wb.save(master)
+
+            source_wb = Workbook()
+            source_ws = source_wb.active
+            source_ws.append(["部门", "事项", "办理情况", "备注"])
+            source_ws.append(["办公室", "事项一", None, ""])
+            source_ws.append(["办公室", "", "推进中", "需协调"])
+            source_wb.save(source)
+
+            report = merge_same_layout(master, [source], output)
+            merged = load_workbook(output)
+            sheet = merged["汇总表"]
+
+        self.assertEqual(sheet["A2"].value, "办公室")
+        self.assertIsNone(sheet["C2"].value)
+        self.assertIsNone(sheet["B3"].value)
+        self.assertEqual(sheet["C3"].value, "推进中")
+        self.assertEqual(report.stats["appended_rows"], 2)
+        self.assertEqual(report.stats["blank_cells_preserved"], 3)
+
+    def test_merge_same_layout_uses_cell_position_when_master_has_existing_rows(self):
+        with tempfile.TemporaryDirectory(prefix="office_tool_table_existing_master_") as tmp:
+            root = Path(tmp)
+            master = root / "master.xlsx"
+            source = root / "source.xlsx"
+            output = root / "merged.xlsx"
+
+            master_wb = Workbook()
+            master_ws = master_wb.active
+            master_ws.title = "总表"
+            master_ws.append(["任务", "办理情况"])
+            master_ws.append(["任务一", ""])
+            master_ws.append(["任务二", "已有回复"])
+            master_wb.save(master)
+
+            source_wb = Workbook()
+            source_ws = source_wb.active
+            source_ws.append(["任务", "办理情况"])
+            source_ws.append(["任务一", "已完成"])
+            source_ws.append(["任务二", "继续推进"])
+            source_wb.save(source)
+
+            report = merge_same_layout(master, [source], output)
+            merged = load_workbook(output)
+            sheet = merged["总表"]
+
+        self.assertEqual(report.stats["merge_mode"], "cell_position")
+        self.assertEqual(sheet["A2"].value, "任务一")
+        self.assertEqual(sheet["B2"].value, "已完成")
+        self.assertEqual(sheet["B3"].value, "已有回复\n继续推进")
+        self.assertIn("master_has_existing_rows", {finding.code for finding in report.findings})
+
     def test_collect_table_inputs_skips_temporary_files(self):
         with tempfile.TemporaryDirectory(prefix="office_tool_table_collect_") as tmp:
             root = Path(tmp)
