@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from copy import copy
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -245,11 +246,14 @@ def merge_same_layout(
     report.stats["sources"] = len(source_paths)
     report.stats["updated_cells"] = 0
     report.stats["appended_values"] = 0
+    report.stats["appended_rows"] = 0
     report.stats["skipped_formula_cells"] = 0
     report.stats["layout_warnings"] = 0
     header_row = detect_header_row(master_ws)
     master_headers = headers_for_row(master_ws, header_row)
     master_merged_ranges = _merged_range_texts(master_ws)
+    template_max_row = master_ws.max_row
+    template_max_col = master_ws.max_column
     report.sheets.append(_sheet_info(str(master_path), master_ws, header_row, master_headers))
 
     for raw_source in source_paths:
@@ -284,8 +288,8 @@ def merge_same_layout(
             source_headers=source_headers,
             master_merged_ranges=master_merged_ranges,
         )
-        max_row = min(master_ws.max_row, sheet.max_row)
-        max_col = min(master_ws.max_column, sheet.max_column)
+        max_row = min(template_max_row, sheet.max_row)
+        max_col = min(template_max_col, sheet.max_column)
         source_values_seen = 0
         for row in range(1, max_row + 1):
             for column in range(1, max_col + 1):
@@ -322,6 +326,10 @@ def merge_same_layout(
                 target_cell.value = separator.join(existing + [value]) if existing else value
                 report.stats["updated_cells"] += 1
                 report.stats["appended_values"] += 1
+        for row in range(template_max_row + 1, sheet.max_row + 1):
+            if _append_source_row(master_ws, sheet, row, report):
+                source_values_seen += 1
+                report.stats["appended_rows"] += 1
         if source_values_seen == 0:
             report.add_finding(
                 "empty_source_sheet",
@@ -334,6 +342,30 @@ def merge_same_layout(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     master_wb.save(output_path)
     return report
+
+
+def _append_source_row(master_ws: "Worksheet", source_ws: "Worksheet", source_row: int, report: TableReport) -> bool:
+    values = [source_ws.cell(source_row, column).value for column in range(1, source_ws.max_column + 1)]
+    if not any(normalized_cell_text(value, normalize=False) for value in values):
+        return False
+    target_row = master_ws.max_row + 1
+    for column in range(1, source_ws.max_column + 1):
+        source_cell = source_ws.cell(source_row, column)
+        if source_cell.data_type == "f":
+            report.stats["skipped_formula_cells"] += 1
+            continue
+        target_cell = master_ws.cell(target_row, column)
+        target_cell.value = source_cell.value
+        if source_cell.has_style:
+            target_cell._style = copy(source_cell._style)
+        if source_cell.number_format:
+            target_cell.number_format = source_cell.number_format
+        if source_cell.alignment:
+            target_cell.alignment = copy(source_cell.alignment)
+    source_height = source_ws.row_dimensions[source_row].height
+    if source_height:
+        master_ws.row_dimensions[target_row].height = source_height
+    return True
 
 
 def _warn_same_layout_mismatches(

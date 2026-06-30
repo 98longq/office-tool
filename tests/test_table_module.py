@@ -302,6 +302,36 @@ class TableModuleTests(unittest.TestCase):
         self.assertGreaterEqual(report.stats["layout_warnings"], 1)
         self.assertIn("layout_mismatch", {finding.code for finding in report.findings})
 
+    def test_merge_same_layout_appends_extra_department_rows(self):
+        with tempfile.TemporaryDirectory(prefix="office_tool_table_same_layout_rows_") as tmp:
+            root = Path(tmp)
+            master = root / "master.xlsx"
+            source = root / "source.xlsx"
+            output = root / "merged.xlsx"
+
+            master_wb = Workbook()
+            master_ws = master_wb.active
+            master_ws.title = "总表"
+            master_ws.append(["部门", "任务", "办理情况"])
+            master_wb.save(master)
+
+            source_wb = Workbook()
+            source_ws = source_wb.active
+            source_ws.title = "办公室"
+            source_ws.append(["部门", "任务", "办理情况"])
+            source_ws.append(["办公室", "任务一", "已完成"])
+            source_ws.append(["办公室", "任务二", "推进中"])
+            source_wb.save(source)
+
+            report = merge_same_layout(master, [source], output)
+            merged = load_workbook(output)
+            sheet = merged["总表"]
+
+        self.assertEqual(sheet["A2"].value, "办公室")
+        self.assertEqual(sheet["B3"].value, "任务二")
+        self.assertEqual(sheet["C3"].value, "推进中")
+        self.assertEqual(report.stats["appended_rows"], 2)
+
     def test_collect_table_inputs_skips_temporary_files(self):
         with tempfile.TemporaryDirectory(prefix="office_tool_table_collect_") as tmp:
             root = Path(tmp)
