@@ -254,6 +254,8 @@ def merge_same_layout(
     master_merged_ranges = _merged_range_texts(master_ws)
     template_max_row = master_ws.max_row
     template_max_col = master_ws.max_column
+    append_rows_mode = not _sheet_has_data_below_header(master_ws, header_row)
+    report.stats["merge_mode"] = "append_rows" if append_rows_mode else "cell_position"
     report.sheets.append(_sheet_info(str(master_path), master_ws, header_row, master_headers))
 
     for raw_source in source_paths:
@@ -287,7 +289,23 @@ def merge_same_layout(
             master_headers=master_headers,
             source_headers=source_headers,
             master_merged_ranges=master_merged_ranges,
+            compare_size=not append_rows_mode,
         )
+        if append_rows_mode:
+            source_values_seen = 0
+            for row in range(source_header_row + 1, sheet.max_row + 1):
+                if _append_source_row(master_ws, sheet, row, report, max_column=template_max_col):
+                    source_values_seen += 1
+                    report.stats["appended_rows"] += 1
+            if source_values_seen == 0:
+                report.add_finding(
+                    "empty_source_sheet",
+                    "info",
+                    "副表工作表没有可汇总的明细行，已跳过。",
+                    workbook=source_path,
+                    sheet=sheet.title,
+                )
+            continue
         max_row = min(template_max_row, sheet.max_row)
         max_col = min(template_max_col, sheet.max_column)
         source_values_seen = 0
@@ -344,12 +362,13 @@ def merge_same_layout(
     return report
 
 
-def _append_source_row(master_ws: "Worksheet", source_ws: "Worksheet", source_row: int, report: TableReport) -> bool:
-    values = [source_ws.cell(source_row, column).value for column in range(1, source_ws.max_column + 1)]
+def _append_source_row(master_ws: "Worksheet", source_ws: "Worksheet", source_row: int, report: TableReport, *, max_column: int | None = None) -> bool:
+    last_column = max_column or source_ws.max_column
+    values = [source_ws.cell(source_row, column).value for column in range(1, last_column + 1)]
     if not any(normalized_cell_text(value, normalize=False) for value in values):
         return False
     target_row = master_ws.max_row + 1
-    for column in range(1, source_ws.max_column + 1):
+    for column in range(1, last_column + 1):
         source_cell = source_ws.cell(source_row, column)
         if source_cell.data_type == "f":
             report.stats["skipped_formula_cells"] += 1
@@ -379,6 +398,7 @@ def _warn_same_layout_mismatches(
     master_headers: list[str],
     source_headers: list[str],
     master_merged_ranges: set[str],
+    compare_size: bool = True,
 ) -> None:
     if master_header_row != source_header_row:
         _add_layout_warning(
@@ -391,7 +411,7 @@ def _warn_same_layout_mismatches(
         _add_layout_warning(report, source_path, source_ws.title, "副表表头与主表不完全一致，已按交叉区域谨慎汇总。")
     if _merged_range_texts(source_ws) != master_merged_ranges:
         _add_layout_warning(report, source_path, source_ws.title, "副表合并单元格结构与主表不完全一致。")
-    if source_ws.max_row != master_ws.max_row or source_ws.max_column != master_ws.max_column:
+    if compare_size and (source_ws.max_row != master_ws.max_row or source_ws.max_column != master_ws.max_column):
         _add_layout_warning(
             report,
             source_path,
@@ -418,6 +438,14 @@ def _compact_headers(headers: list[str]) -> list[str]:
 
 def _merged_range_texts(sheet: "Worksheet") -> set[str]:
     return {str(item) for item in sheet.merged_cells.ranges}
+
+
+def _sheet_has_data_below_header(sheet: "Worksheet", header_row: int) -> bool:
+    for row in range(header_row + 1, sheet.max_row + 1):
+        for column in range(1, sheet.max_column + 1):
+            if normalized_cell_text(sheet.cell(row, column).value, normalize=False):
+                return True
+    return False
 
 
 def _looks_like_aggregate_cell(value, separator: str) -> bool:

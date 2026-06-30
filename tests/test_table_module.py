@@ -332,6 +332,48 @@ class TableModuleTests(unittest.TestCase):
         self.assertEqual(sheet["C3"].value, "推进中")
         self.assertEqual(report.stats["appended_rows"], 2)
 
+    def test_merge_same_layout_collects_all_rows_from_empty_template(self):
+        with tempfile.TemporaryDirectory(prefix="office_tool_table_one_click_collect_") as tmp:
+            root = Path(tmp)
+            master = root / "template.xlsx"
+            source_a = root / "office.xlsx"
+            source_b = root / "finance.xlsx"
+            output = root / "merged.xlsx"
+
+            master_wb = Workbook()
+            master_ws = master_wb.active
+            master_ws.title = "汇总表"
+            master_ws.append(["部门", "事项", "办理情况", "备注"])
+            master_wb.save(master)
+
+            source_a_wb = Workbook()
+            source_a_ws = source_a_wb.active
+            source_a_ws.title = "办公室"
+            source_a_ws.append(["部门", "事项", "办理情况", "备注"])
+            for index in range(1, 6):
+                source_a_ws.append(["办公室", f"事项{index}", "已完成", ""])
+            source_a_wb.save(source_a)
+
+            source_b_wb = Workbook()
+            source_b_ws = source_b_wb.active
+            source_b_ws.title = "财务部"
+            source_b_ws.append(["部门", "事项", "办理情况", "备注"])
+            for index in range(1, 4):
+                source_b_ws.append(["财务部", f"事项{index}", "推进中", ""])
+            source_b_wb.save(source_b)
+
+            report = merge_same_layout(master, [source_a, source_b], output)
+            merged = load_workbook(output)
+            sheet = merged["汇总表"]
+
+        self.assertEqual(sheet.max_row, 9)
+        self.assertEqual(sheet["A2"].value, "办公室")
+        self.assertEqual(sheet["B6"].value, "事项5")
+        self.assertEqual(sheet["A7"].value, "财务部")
+        self.assertEqual(sheet["B9"].value, "事项3")
+        self.assertEqual(report.stats["merge_mode"], "append_rows")
+        self.assertEqual(report.stats["appended_rows"], 8)
+
     def test_collect_table_inputs_skips_temporary_files(self):
         with tempfile.TemporaryDirectory(prefix="office_tool_table_collect_") as tmp:
             root = Path(tmp)
